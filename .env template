@@ -1,7 +1,11 @@
-NODE_ENV=
-PORT= 
+# production, test, development
+NODE_ENV=development
+PORT=
 
-DB_HOST= 
-DB_USER= 
-DB_PASSWORD= 
-DB_NAME= 
+DATABASE_LOCAL=host=localhost&port=3306&user=root&password=password&name=name&connectionlimit=limit
+DATABASE_TEST=
+DATABASE=
+
+JWT_SECRET_KEY=
+JWT_ALGORITHM=
+JWT_ISSUER=
