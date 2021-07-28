@@ -24,5 +24,6 @@ const check = {
     phone(phone) {
         let regExp = /(^02.{0}|^01.|[0-9]{3})([0-9]+)([0-9]{4})/g;
         return regExp.test(phone);
-    }
+    },
+    
 }

@@ -19,11 +19,11 @@ module.exports = {
         password: database.password,
         database: database.name,
         port: Number(database.port),
-        connectionLimit:Number(database.connectionlimit),
+        connectionLimit: Number(database.connectionlimit),
     },
     jwt: {
         secretKey: process.env.JWT_SECRET_KEY,
         algorithm: process.env.JWT_ALGORITHM,
         issuer: process.env.JWT_ISSUER,
     }
-}
+};
