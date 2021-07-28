@@ -1,5 +1,6 @@
 const express = require('express');
 const dayjs = require('dayjs');
+require('dayjs/locale/ko');
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
@@ -24,7 +25,7 @@ app.use(sql(config.mysql));
 
 // Rest API
 app.use('/', require('./routes/common'));
-
+app.use('/user', require('./routes/user'));
 
 app.use((req, res, next) => {
     next(err(404, '요청하신 페이지를 찾을 수 없습니다.'));
