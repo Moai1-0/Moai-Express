@@ -30,6 +30,13 @@ const controller = {
             next(e);
         }
     },
+    async signin(req, res, next) {
+        try {
+            next({ message: "ping" });
+        } catch (e) {
+            next(e);
+        }
+    },
 };
 
 module.exports = controller;
