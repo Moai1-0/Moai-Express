@@ -2,13 +2,23 @@ const multer = require('multer');
 
 const productImgStorage = multer.diskStorage({
     destination(req, file, cb) {
-        cb(null, 'media/img');
+        cb(null, 'media/product');
     },
     filename(req, file, cb) {
         cb(null, `${file.originalname}`);
     }
 });
 const productImgUpload = multer({ storage: productImgStorage });
+
+const shopImgStorage = multer.diskStorage({
+    destination(req, file, cb) {
+        cb(null, 'media/shop');
+    },
+    filename(req, file, cb) {
+        cb(null, `${file.originalname}`);
+    }
+});
+const shopImgUpload = multer({ storage: shopImgStorage });
 
 const testUpload = multer(
     {
@@ -18,4 +28,4 @@ const testUpload = multer(
 
 
 
-module.exports = { productImgUpload, testUpload };
+module.exports = { productImgUpload, shopImgUpload };
