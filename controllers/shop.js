@@ -1,7 +1,9 @@
 const err = require('http-errors');
+const dayjs = require('dayjs');
 const { param } = require('../utils/params');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
-const { encodeToken, decodeToken } = require('../utils/token');
+const { encodeToken } = require('../utils/token');
+const { S3 } = require('../utils/multer');
 const controller = {
     async ping(req, res, next) {
         try {
@@ -10,13 +12,12 @@ const controller = {
             next(e);
         }
     },
-    async uploadProduct({ body, files }, { pool }, next) {
+    async uploadProduct({ body, shop, files }, { pool }, next) {
         try {
-            const shop_no = param(body, "shop_no");
+            const shop_no = param(shop, "shop_no");
             const name = param(body, "name");
             const description = param(body, "description");
             const expected_quantity = param(body, "expected_quantity");
-            const actual_quantity = param(body, "actual_quantity");
             const rest_quantity = expected_quantity;
             const regular_price = param(body, "regular_price");
             const discounted_price = param(body, "discounted_price");
@@ -24,9 +25,63 @@ const controller = {
             const expiry_datetime = param(body, "expiry_datetime");
             const pickup_datetime = param(body, "pickup_datetime");
 
+            const connection = await pool.getConnection(async conn => await conn);
 
-            console.log(body);
-            next({ message: "ping" });
+            try {
+                await connection.beginTransaction();
+                const [result] = await pool.query(`
+                INSERT INTO products(
+                    shop_no,
+                    name,
+                    description,
+                    expected_quantity,
+                    rest_quantity,
+                    regular_price,
+                    discounted_price,
+                    return_price,
+                    expiry_datetime,
+                    pickup_datetime
+                    )
+                VALUES (?,?,?,?,?,?,?,?,?,?)`,
+                    [
+                        shop_no,
+                        name,
+                        description,
+                        expected_quantity,
+                        rest_quantity,
+                        regular_price,
+                        discounted_price,
+                        return_price,
+                        expiry_datetime,
+                        pickup_datetime
+                    ]);
+                files.map(async (file, index) => {
+                    const { instance, params } = S3;
+                    // 이름 + 등록 시간 + shop_no
+                    const file_name = `product/${name}-${dayjs().format("YYYYMMDDHHmmss")}-${shop_no}-${index + 1}`;
+                    params.Key = file_name;
+                    params.Body = file.buffer;
+                    instance.upload(params, (error, data) => {
+                        if (error) throw err.InternalServerError('S3 에러');
+                    });
+                    const [result2] = await pool.query(`
+                        INSERT INTO product_images (
+                            product_no,
+                            name,
+                            path
+                        )
+                        VALUES(?,?,?)
+                    `, [result.insertId, name, file_name]);
+                });
+                await connection.commit();
+                next({ message: "ping" });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+
         } catch (e) {
             next(e);
         }

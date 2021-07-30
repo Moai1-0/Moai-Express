@@ -1,14 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const shop = require('../controllers/shop');
-const { productImgUpload } = require('../utils/multer');
+const { checkShop } = require('../middlewares/auth');
+const { s3upload } = require('../utils/multer');
 
 // router.get('/main', checkUser, board.mainPage);
 
 router.post('/product'
-    , productImgUpload.array('productImages')
+    , checkShop
+    , s3upload.array('product_images')
     , shop.uploadProduct
-
 );
 router.get('/products/prebid');
 router.get('/products/prebid/detail');

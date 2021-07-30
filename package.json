@@ -18,7 +18,7 @@
   },
   "homepage": "https://github.com/JungTag/Moai-Server#readme",
   "dependencies": {
-    "aws-sdk": "^2.950.0",
+    "aws-sdk": "^2.957.0",
     "bcrypt": "^5.0.1",
     "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",

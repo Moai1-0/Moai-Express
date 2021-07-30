@@ -1,31 +1,22 @@
 const multer = require('multer');
+const multerS3 = require('multer-s3');
+const aws = require('aws-sdk');
+const { s3 } = require('../config/index');
+require('dotenv').config();
 
-const productImgStorage = multer.diskStorage({
-    destination(req, file, cb) {
-        cb(null, 'media/product');
-    },
-    filename(req, file, cb) {
-        cb(null, `${file.originalname}`);
-    }
-});
-const productImgUpload = multer({ storage: productImgStorage });
+const s3_instance = new aws.S3({ ...s3 });
+const params = {
+    Bucket: s3.bucket,
+    Key: '',
+    Body: null
+};
+const S3 = {
+    instance: s3_instance,
+    params: params
 
-const shopImgStorage = multer.diskStorage({
-    destination(req, file, cb) {
-        cb(null, 'media/shop');
-    },
-    filename(req, file, cb) {
-        cb(null, `${file.originalname}`);
-    }
-});
-const shopImgUpload = multer({ storage: shopImgStorage });
-
-const testUpload = multer(
-    {
-        storage: multer.memoryStorage(),
-        // limits: { fields: 1, fileSize: 6000000, files: 1, parts: 2 } 
-    });
+};
+const s3upload = multer({ storage: multer.memoryStorage() });
 
 
 
-module.exports = { productImgUpload, shopImgUpload };
+module.exports = { s3upload, S3 };

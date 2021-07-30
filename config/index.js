@@ -25,5 +25,11 @@ module.exports = {
         secretKey: process.env.JWT_SECRET_KEY,
         algorithm: process.env.JWT_ALGORITHM,
         issuer: process.env.JWT_ISSUER,
+    },
+    s3: {
+        accessKeyId: process.env.S3_ACCESSKEYID,
+        secretAccessKey: process.env.S3_SECRETKEY,
+        region: process.env.S3_REGION,
+        bucket: process.env.S3_BUCKET
     }
 };
