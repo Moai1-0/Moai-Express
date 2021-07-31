@@ -12,9 +12,9 @@ router.post('/product'
     , shop.uploadProduct
 );
 router.get('/products/prebid', checkShop, shop.getPrebidProducts);
-router.get('/products/prebid/detail',checkShop, shop.getPrebidProduct);
-router.get('/products/bid');
-router.get('/products/bid/detail');
+router.get('/products/prebid/detail', checkShop, shop.getPrebidProduct);
+router.get('/products/bid', checkShop, shop.getBidProducts);
+router.get('/products/bid/detail', checkShop, shop.getBidProduct);
 router.patch('/pickup');
 router.patch('/quantity/actual');
 router.get('/products/complete');

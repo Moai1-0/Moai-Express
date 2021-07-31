@@ -131,7 +131,7 @@ const controller = {
                     INNER JOIN product_images AS b
                     ON a.no = b.product_no
                     WHERE
-                    a.expiry_datetime > NOW()
+                    a.expiry_datetime < NOW()
                     AND a.shop_no = ?
                     GROUP BY b.product_no
                     `, [shop_no]);
@@ -147,6 +147,94 @@ const controller = {
         }
     },
     async getPrebidProduct({ shop, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const product_no = param(query, "product_no");
+            const [result] = await pool.query(`
+                SELECT
+                a.no AS "order_no",
+                a.user_no,
+                a.purchase_quantity,
+                b.name AS "user_name",
+                b.phone
+                FROM orders AS a
+                INNER JOIN users AS b
+                ON a.user_no = b.no
+                WHERE a.status = "bid"
+                AND a.shop_no = ?
+                AND a.product_no = ?;
+
+                SELECT
+                a.no,
+                a.name,
+                a.expected_quantity,
+                a.rest_quantity,
+                a.regular_price,
+                a.discounted_price,
+                a.pickup_datetime,
+                a.expiry_datetime,
+                b.sort,
+                GROUP_CONCAT(path) AS "product_images"
+                FROM products AS a
+                INNER JOIN product_images AS b
+                ON a.no = b.product_no
+                WHERE
+                a.expiry_datetime < NOW()
+                AND a.shop_no = ?
+                AND a.no = ?
+                GROUP BY b.product_no
+            `, [shop_no, product_no, shop_no, product_no]);
+
+            if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
+            next({
+                product: {
+                    ...result[1][0],
+                    pickup_datetime: dayjs(result[1][0].pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item)
+                },
+                orders: result[0]
+            });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getBidProducts({ shop, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+
+            const [result] = await pool.query(`
+                    SELECT
+                    a.no,
+                    a.name,
+                    a.expected_quantity,
+                    a.rest_quantity,
+                    a.regular_price,
+                    a.discounted_price,
+                    a.pickup_datetime,
+                    a.expiry_datetime,
+                    b.sort,
+                    GROUP_CONCAT(path) AS "product_images"
+                    FROM products AS a
+                    INNER JOIN product_images AS b
+                    ON a.no = b.product_no
+                    WHERE
+                    a.expiry_datetime > NOW()
+                    AND a.shop_no = ?
+                    GROUP BY b.product_no
+                    `, [shop_no]);
+
+            next(result.map(item => ({
+                ...item,
+                pickup_datetime: dayjs(item.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                product_images: item.product_images.split(',').map(item => S3_URL + item)
+            })));
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getBidProduct({ shop, query }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
             const product_no = param(query, "product_no");
@@ -198,7 +286,7 @@ const controller = {
             next(e);
         }
     },
-    
+
     // 임시 api
     async signup({ body }, { pool }, next) {
         try {
