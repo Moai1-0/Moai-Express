@@ -71,8 +71,8 @@ const param = function (data, key, option) {
 };
 const auth = function (data, key, isRequired = true) {
     if (isRequired) {
-        if (data === undefined) throw err.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
-        else if (data[key] === undefined) throw err.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
+        if (data === undefined) throw error.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
+        else if (data[key] === undefined) throw error.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
         return data[key];
     } else {
         if (data === undefined) return null;

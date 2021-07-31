@@ -12,7 +12,7 @@ const params = {
 };
 const S3 = {
     instance: s3_instance,
-    params: params
+    params: params,
 
 };
 const s3upload = multer({ storage: multer.memoryStorage() });

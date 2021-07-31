@@ -11,8 +11,8 @@ router.post('/product'
     , s3upload.array('product_images')
     , shop.uploadProduct
 );
-router.get('/products/prebid');
-router.get('/products/prebid/detail');
+router.get('/products/prebid', checkShop, shop.getPrebidProducts);
+router.get('/products/prebid/detail',checkShop, shop.getPrebidProduct);
 router.get('/products/bid');
 router.get('/products/bid/detail');
 router.patch('/pickup');
