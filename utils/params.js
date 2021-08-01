@@ -1,4 +1,6 @@
-const error = require('http-errors');
+
+const err = require('http-errors');
+
 
 const condition = {
     contains(value, array) {
@@ -42,20 +44,23 @@ const parser = {
         else return data;
     }
 };
+
+
 const param = function (data, key, option) {
-    if (data === null || data === undefined) throw error.BadRequest(`파라미터 처리 오류입니다.`);
+    if (data === null || data === undefined) throw err.BadRequest(`파라미터 처리 오류입니다.`);
     if (Array.isArray(key)) {
         const errors = [];
         key.map(item => { if (data[item] === undefined) errors.push(item); });
-        if (errors.length !== 0) throw error.BadRequest(`파라미터 처리 오류입니다. 해당 파라미터를 추가하여 요청해주세요(${JSON.stringify(errors)}).`);
+        if (errors.length !== 0) throw err.BadRequest(`파라미터 처리 오류입니다. 해당 파라미터를 추가하여 요청해주세요(${JSON.stringify(errors)}).`);
         else return data;
     } else {
         if (data[key] === undefined) {
             if (option === undefined) {
-                throw error.BadRequest(`파라미터 처리 오류입니다. 해당 파라미터를 추가하여 요청해주세요(${key}).`);
+
+                throw err.BadRequest(`파라미터 처리 오류입니다. 해당 파라미터를 추가하여 요청해주세요(${key}).`);
             } else if (typeof option === 'function') {
                 const value = option(data[key]);
-                if (value === undefined) throw error.BadRequest(`파라미터 처리 오류입니다. 해당 파라미터를 추가하여 요청해주세요(${key}).`);
+                if (value === undefined) throw err.BadRequest(`파라미터 처리 오류입니다. 해당 파라미터를 추가하여 요청해주세요(${key}).`);
                 return value;
             } else {
                 return option;
@@ -69,10 +74,11 @@ const param = function (data, key, option) {
         return data[key];
     }
 };
+
 const auth = function (data, key, isRequired = true) {
     if (isRequired) {
-        if (data === undefined) throw error.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
-        else if (data[key] === undefined) throw error.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
+        if (data === undefined) throw err.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
+        else if (data[key] === undefined) throw err.Unauthorized(`유효하지 않은 로그인 토큰입니다.`);
         return data[key];
     } else {
         if (data === undefined) return null;
@@ -80,6 +86,7 @@ const auth = function (data, key, isRequired = true) {
         return data[key];
     }
 };
+
 module.exports = {
     condition,
     parser,
