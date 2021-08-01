@@ -8,7 +8,6 @@ const cors = require('cors');
 const config = require('./config');
 const err = require('http-errors');
 const { sql } = require('./middlewares/database');
-
 const PORT = 5000;
 const app = express();
 
@@ -21,11 +20,13 @@ app.use(cookieParser());
 app.use(cors({ credentials: true, origin: true }));
 
 // Custom Middlewares
-app.use(sql(config.mysql));
+app.use(sql(config.mysql), );
 
 // Rest API
 app.use('/', require('./routes/common'));
+app.use('/shop', require('./routes/shop'));
 app.use('/user', require('./routes/user'));
+
 
 app.use((req, res, next) => {
     next(err(404, '요청하신 페이지를 찾을 수 없습니다.'));
