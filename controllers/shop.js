@@ -286,7 +286,52 @@ const controller = {
             next(e);
         }
     },
+    async enterActualQuantity({ shop, body }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const actual_quantity = param(body, 'actual_quantity');
+            const product_no = param(body, "product_no");
 
+            const [result] = await pool.query(`
+                SELECT *
+                FROM products
+                WHERE
+                no = ?
+            `, [product_no]);
+
+            if (result[0].expected_quantity < actual_quantity) throw err.BadRequest("예상 재고수 보다 많이 입력");
+
+            const reserved_quantity = result[0].expected_quantity - result[0].rest_quantity;
+            const order_amount = result[0].order_amount;
+            // actual >= reserved_quantity -> 그냥 모두 픽업처리
+            // actual < reserved_quantity -> 선착순으로 픽업 나머지 환급
+            if (reserved_quantity > actual_quantity) {
+                await pool.query(`
+                    UPDATE orders SET
+                    status = "pre_pickup"
+                    WHERE no IN
+                        (
+                            SELECT no
+                            FROM orders
+                            WHERE
+                            prodcut_no = ?
+                            AND enabled = 1
+                            ORDER BY create_datetime DESC
+                            LIMIT ?
+                        )
+                     
+                `, [product_no, order_amount]);
+            } else if (reserved_quantity <= actual_quantity) {
+
+            }
+
+
+            console.log(result);
+            next({ message: "ping" });
+        } catch (e) {
+            next(e);
+        }
+    },
     // 임시 api
     async signup({ body }, { pool }, next) {
         try {

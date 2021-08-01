@@ -16,7 +16,7 @@ router.get('/products/prebid/detail', checkShop, shop.getPrebidProduct);
 router.get('/products/bid', checkShop, shop.getBidProducts);
 router.get('/products/bid/detail', checkShop, shop.getBidProduct);
 router.patch('/pickup');
-router.patch('/quantity/actual');
+router.patch('/quantity/actual', checkShop, shop.enterActualQuantity);
 router.get('/products/complete');
 router.get('/products/complete/detail');
 router.post('/signin', shop.signin);
@@ -24,6 +24,5 @@ router.post('/signup', shop.signup);
 router.get('/products/bookmark');
 router.get('/product/bookmark');
 router.delete('/product/bookmark');
-
 
 module.exports = router;
