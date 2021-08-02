@@ -16,8 +16,8 @@ const controller = {
             const [ results ] = await pool.query(`
                 SELECT
                 COUNT(*) AS total_count
-                FROM products AS p
-                WHERE p.enabled=1;
+                FROM products
+                WHERE enabled=1;
 
                 SELECT
                 p.no AS product_no,
@@ -111,16 +111,85 @@ const controller = {
         try {
             /**
              * 임시 코드
+             * 로그, 계좌번호 체크 추가
              */
             const name = param(body, 'name');
             const phone = param(body, 'phone');
             const shop_no = param(body, 'shop_no');
-            const prodcut_no = param(body, 'product_no');
-            const depositor_no = param(body, 'depositor_no');
+            const product_no = param(body, 'product_no');
+            const depositor_name = param(body, 'depositor_name');
             const account_number = param(body, 'account_number');
-            const bank = param(body, 'bank');
-            const first_registration_number = param(body, 'first_registration_number');
-            // 계좌번호 체크
+            // const bank = param(body, 'bank'); // https://superad.tistory.com/229 (개설기관 표준코드)
+            // const first_registration_number = param(body, 'first_registration_number');
+            const total_purchase_quantity = param(body, 'total_purchase_quantity');
+            const total_purchase_price = param(body, 'total_purchase_price');
+            /**
+             * 계좌번호 체크
+             */
+            const [ result1 ] = await pool.query(`
+                SELECT *
+                FROM users
+                WHERE enabled = 1
+                AND name = ?
+                AND phone =?;
+            `, [ name, phone ]);
+            
+            const connection = await pool.getConnection(async conn => conn);
+            try {
+                let user_no;
+                await connection.beginTransaction();
+
+                if (result1[0].length < 1) {
+                    const [ result2 ] = await connection.query(`
+                        INSERT INTO users (
+                            name,
+                            phone
+                        )
+                        VALUES (?, ?);
+                    `, [ name, phone ]);
+                    user_no = result2.insertId;
+                } else {
+                    user_no = result1[0].no;
+                }
+                const [ result3 ] = await connection.query(`
+                    SELECT
+                    rest_quantity
+                    FROM products
+                    WHERE enabled = 1
+                    AND no = ?;
+                `, [ product_no ]);
+
+                if (result3[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
+
+                await connection.query(`
+                    INSERT INTO reservations (
+                        user_no,
+                        shop_no,
+                        product_no,
+                        depositor_name,
+                        account_number,
+                        total_purchase_quantity,
+                        total_purchase_price
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                `, [ user_no, shop_no, product_no, depositor_name, account_number, total_purchase_quantity, total_purchase_price ]);
+                
+                await connection.query(`
+                    UPDATE
+                    products
+                    SET rest_quantity = rest_quantity - ?
+                    WHERE enabled = 1
+                    AND no = ?;
+                `, [ total_purchase_quantity, product_no]);
+
+                await connection.commit();
+                next({ message: "예약되었습니다." });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
         } catch (e) {
             next(e);            
         }
