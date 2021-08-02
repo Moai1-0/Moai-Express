@@ -1,8 +1,9 @@
 const err = require('http-errors');
 const dayjs = require('dayjs');
-const { auth, param, parser, condition } = require('../utils/params');
 require('dayjs/locale/ko');
 dayjs.locale('ko');
+const { auth, param, parser, condition } = require('../utils/params');
+const { encodeToken } = require('../utils/token');
 
 const PAGINATION_COUNT = 10;
 
@@ -102,6 +103,51 @@ const controller = {
                 pickup_datetime: dayjs(result[0].pickup_datetime).format(`M월 D일(ddd) a h시 m분`),
                 impending: dayjs(result[0].expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
             });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async reserveProduct({ body }, { pool }, next) {
+        try {
+            /**
+             * 임시 코드
+             */
+            const name = param(body, 'name');
+            const phone = param(body, 'phone');
+            const shop_no = param(body, 'shop_no');
+            const prodcut_no = param(body, 'product_no');
+            const depositor_no = param(body, 'depositor_no');
+            const account_number = param(body, 'account_number');
+            const bank = param(body, 'bank');
+            const first_registration_number = param(body, 'first_registration_number');
+            // 계좌번호 체크
+        } catch (e) {
+            next(e);            
+        }
+    },
+    async confirmUser({ body }, { pool }, next) {
+        try {
+            const name = param(body, 'name');
+            const phone = param(body, 'phone'); // DB 내 phone에 인덱스 설정 필요
+
+            const [ result ] = await pool.query(`
+                SELECT
+                no AS user_no
+                FROM users
+                WHERE enabled = 1
+                AND phone = ?
+                AND name = ?;
+            `, [phone, name]);
+            if (result[0].length < 1) throw err(400, `이름 또는 전화번호가 일치하지 않습니다.`);
+            const token = encodeToken({ type: `customer`, user_no: result[0].user_no }, { expiresIn: '10m' });
+            next({ token });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getPurchaseHistory({ user }, { pool }, next) {
+        try {
+            next();
         } catch (e) {
             next(e);
         }
