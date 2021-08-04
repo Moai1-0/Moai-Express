@@ -17,20 +17,19 @@ const controller = {
                 SELECT
                 COUNT(*) AS total_count
                 FROM products
-                WHERE enabled=1;
+                WHERE enabled = 1;
 
                 SELECT
                 p.no AS product_no,
                 i.path,
                 p.shop_no,
-                s.name AS shop_name,
                 p.name AS prduct_name,
                 p.rest_quantity,
                 p.regular_price,
                 p.discounted_price,
                 p.expiry_datetime
                 FROM products AS p
-                JOIN (
+                LEFT JOIN (
                     SELECT
                     product_no,
                     path
@@ -39,12 +38,11 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                JOIN shops AS s
-                ON p.shop_no = s.no
                 WHERE p.enabled = 1
                 ORDER BY p.created_datetime
                 LIMIT ? OFFSET ?;
             `, [ count, offset ]);
+
             next({
                 total_count: results[0][0].total_count,
                 products: results[1].map((product) => ({
@@ -91,10 +89,13 @@ const controller = {
                 ON p.no = i.product_no
                 JOIN shops AS s
                 ON p.shop_no = s.no
-                WHERE p.enabled = 1
-                AND s.enabled = 1
-                AND p.no = ?;
+                WHERE p.no = ?
+                AND p.enabled = 1
+                AND s.enabled = 1;
             `, [ product_no, product_no ]);
+            
+            if (result[0].length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
+
             next({
                 ...result[0],
                 paths: result[0].paths.split(','),
@@ -129,10 +130,10 @@ const controller = {
             const [ result1 ] = await pool.query(`
                 SELECT *
                 FROM users
-                WHERE enabled = 1
+                WHERE phone = ?
                 AND name = ?
-                AND phone =?;
-            `, [ name, phone ]);
+                AND enabled = 1;
+            `, [ phone, name ]);
             
             const connection = await pool.getConnection(async conn => conn);
             try {
@@ -155,8 +156,8 @@ const controller = {
                     SELECT
                     rest_quantity
                     FROM products
-                    WHERE enabled = 1
-                    AND no = ?;
+                    WHERE no = ?
+                    AND enabled = 1;
                 `, [ product_no ]);
 
                 if (result3[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
@@ -178,8 +179,8 @@ const controller = {
                     UPDATE
                     products
                     SET rest_quantity = rest_quantity - ?
-                    WHERE enabled = 1
-                    AND no = ?;
+                    WHERE no = ?
+                    AND enabled = 1;
                 `, [ total_purchase_quantity, product_no]);
 
                 await connection.commit();
@@ -203,33 +204,109 @@ const controller = {
                 SELECT
                 no AS user_no
                 FROM users
-                WHERE enabled = 1
-                AND phone = ?
-                AND name = ?;
+                WHERE phone = ?
+                AND name = ?
+                enabled = 1;
             `, [phone, name]);
+
             if (result[0].length < 1) throw err(400, `이름 또는 전화번호가 일치하지 않습니다.`);
             const token = encodeToken({ type: `customer`, user_no: result[0].user_no }, { expiresIn: '10m' });
+
             next({ token });
         } catch (e) {
             next(e);
         }
     },
     async getReservationHistory({ user }, { pool }, next) {
-        /**
-         * 임시 코드
-         */
         try {
-            next();
+            /**
+             * 페이지네이션 추가
+             */
+            const user_no = auth(user, 'user_no');
+
+            const [ results ] = await pool.query(`
+                SELECT
+                r.no AS reservation_no,
+                p.no AS product_no,
+                i.path,
+                r.created_datetime,
+                p.pickup_datetime,
+                p.expiry_datetime
+                FROM reservations AS r
+                JOIN products AS p
+                ON r.product_no = p.no
+                LEFT JOIN (
+                    SELECT
+                    product_no,
+                    path
+                    FROM product_images
+                    WHERE enabled = 1
+                    AND sort = 1
+                ) AS i
+                ON p.no = i.product_no
+                WHERE r.user_no = ?
+                AND r.status = 'ongoing'
+                AND r.enabled = 1;
+            `, [ user_no ]);
+
+            next({
+                reservations: results.map((reservation) => ({
+                    ...reservation,
+                    created_datetime: dayjs(reservation.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+                    pickup_datetime: dayjs(reservation.pickup_datetime).format(`M월 D일(ddd) a h시 m분`),
+                    expiry_datetime: dayjs(reservation.expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
+                }))
+            });
         } catch (e) {
             next(e);
         }
     },
     async getPurchaseHistory({ user }, { pool }, next) {
-        /**
-         * 임시 코드
-         */
         try {
-            next();
+            /**
+             * 페이지네이션 추가
+             */
+            const user_no = auth(user, 'user_no');
+            
+            const [ results ] = await pool.query(`
+                SELECT
+                o.no AS order_no,
+                p.no AS product_no,
+                o.reservation_no,
+                i.path,
+                o.status,
+                o.purchase_price,
+                o.purchase_quantity,
+                o.return_price,
+                o.created_datetime,
+                p.pickup_datetime,
+                p.expiry_datetime
+                FROM orders as o
+                JOIN products as p
+                ON o.product_no = p.no
+                LEFT JOIN (
+                    SELECT
+                    product_no,
+                    path
+                    FROM product_images
+                    WHERE enabled = 1
+                    AND sort = 1
+                ) AS i
+                ON p.no = i.product_no
+                WHERE o.user_no = ?
+                AND p.enabled = 1
+                AND o.enabled = 1
+                ORDER BY o.created_datetime DESC
+            `, [ user_no ]);
+
+            next({
+                orders: results.map((order) => ({
+                    ...order,
+                    created_datetime: dayjs(order.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+                    pickup_datetime: dayjs(order.pickup_datetime).format(`M월 D일(ddd) a h시 m분`),
+                    expiry_datetime: dayjs(order.expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
+                }))
+            });
         } catch (e) {
             next(e);
         }

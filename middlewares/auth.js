@@ -1,4 +1,3 @@
-const jwt = require('../utils/token');
 const err = require('http-errors');
 const { encodeToken, decodeToken, getToken } = require('../utils/token');
 const { auth, } = require('../utils/params');
@@ -21,8 +20,8 @@ module.exports = {
             const [result] = await pool.query(`
                 SELECT *
                 FROM shops
-                WHERE enabled = 1
-                AND no = ?
+                WHERE no = ?
+                AND enabled = 1
             `, [decoded.shop_no]);
 
             if (result.length < 1) throw err.Unauthorized('디비에 shop없음');
@@ -41,8 +40,8 @@ module.exports = {
             const [ result ] = await pool.query(`
                 SELECT *
                 FROM users
-                WHERE enabled = 1
-                AND no = ?
+                WHERE no = ?
+                AND enabled = 1
             `, [decoded.user_no]);
 
             if (result.length < 1) throw err.Unauthorized('디비에 user없음');
