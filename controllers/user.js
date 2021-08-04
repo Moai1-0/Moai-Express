@@ -214,7 +214,20 @@ const controller = {
             next(e);
         }
     },
+    async getReservationHistory({ user }, { pool }, next) {
+        /**
+         * 임시 코드
+         */
+        try {
+            next();
+        } catch (e) {
+            next(e);
+        }
+    },
     async getPurchaseHistory({ user }, { pool }, next) {
+        /**
+         * 임시 코드
+         */
         try {
             next();
         } catch (e) {
