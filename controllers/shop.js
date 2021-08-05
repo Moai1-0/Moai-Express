@@ -6,6 +6,7 @@ const { encodeToken } = require('../utils/token');
 const { S3 } = require('../utils/multer');
 
 const S3_URL = require('../config/index').s3.endPoint;
+const { connect } = require('../routes/shop');
 
 const controller = {
     async ping(req, res, next) {
@@ -32,7 +33,7 @@ const controller = {
 
             try {
                 await connection.beginTransaction();
-                const [result] = await pool.query(`
+                const [result] = await connection.query(`
                 INSERT INTO products(
                     shop_no,
                     name,
@@ -95,11 +96,11 @@ const controller = {
             const password = param(body, 'password');
 
             const [results] = await pool.query(`
-                SELECT
+                    SELECT
                     *
                     FROM shops 
-                WHERE enabled = 1
-                AND id = ?;
+                    WHERE enabled = 1
+                    AND id = ?;
                     `, [id, password]);
             const accountValid = compareSync(password.toString(), results[0].password);
             if (results.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
@@ -117,8 +118,8 @@ const controller = {
 
             const [result] = await pool.query(`
                     SELECT
-                    a.no,
-                    a.name,
+                    a.no AS 'product_no',
+                    a.name AS 'product_name',
                     a.expected_quantity,
                     a.rest_quantity,
                     a.regular_price,
@@ -131,8 +132,10 @@ const controller = {
                     INNER JOIN product_images AS b
                     ON a.no = b.product_no
                     WHERE
-                    a.expiry_datetime < NOW()
+                    a.expiry_datetime > NOW()
+                    AND a.status = 'ongoing'
                     AND a.shop_no = ?
+                    AND a.enabled = 1
                     GROUP BY b.product_no
                     `, [shop_no]);
 
@@ -151,22 +154,33 @@ const controller = {
             const shop_no = auth(shop, "shop_no");
             const product_no = param(query, "product_no");
             const [result] = await pool.query(`
-                SELECT
-                a.no AS "order_no",
+                SELECT 
+                a.no AS reservation_no,
                 a.user_no,
-                a.purchase_quantity,
-                b.name AS "user_name",
-                b.phone
-                FROM orders AS a
-                INNER JOIN users AS b
-                ON a.user_no = b.no
-                WHERE a.status = "bid"
-                AND a.shop_no = ?
-                AND a.product_no = ?;
+                a.shop_no,
+                a.product_no,
+                a.depositor_name,
+                a.account_number,
+                a.total_purchase_quantity,
+                a.total_purchase_price,
+                b.name AS "product_name",
+                c.name AS "user_name",
+                c.phone,
+                a.created_datetime
+                FROM reservations AS a
+                INNER JOIN products AS b
+                ON a.product_no = b.no
+                INNER JOIN users AS c
+                ON a.user_no = c.no 
+                WHERE
+                a.shop_no = ?
+                AND a.product_no = ?
+                AND a.enabled = 1
+                ORDER BY a.created_datetime ASC;
 
                 SELECT
-                a.no,
-                a.name,
+                a.no AS product_no,
+                a.name AS product_name,
                 a.expected_quantity,
                 a.rest_quantity,
                 a.regular_price,
@@ -179,7 +193,7 @@ const controller = {
                 INNER JOIN product_images AS b
                 ON a.no = b.product_no
                 WHERE
-                a.expiry_datetime < NOW()
+                a.expiry_datetime > NOW()
                 AND a.shop_no = ?
                 AND a.no = ?
                 GROUP BY b.product_no
@@ -187,7 +201,7 @@ const controller = {
 
             if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
             next({
-                product: {
+                reservations: {
                     ...result[1][0],
                     pickup_datetime: dayjs(result[1][0].pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
                     expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
@@ -208,6 +222,7 @@ const controller = {
                     a.no,
                     a.name,
                     a.expected_quantity,
+                    a.actual_quantity,
                     a.rest_quantity,
                     a.regular_price,
                     a.discounted_price,
@@ -219,8 +234,10 @@ const controller = {
                     INNER JOIN product_images AS b
                     ON a.no = b.product_no
                     WHERE
-                    a.expiry_datetime > NOW()
-                    AND a.shop_no = ?
+                    a.shop_no = ?
+                    AND a.expiry_datetime < NOW()
+                    AND a.status = 'ongoing'
+                    AND a.enabled = 1
                     GROUP BY b.product_no
                     `, [shop_no]);
 
@@ -239,22 +256,33 @@ const controller = {
             const shop_no = auth(shop, "shop_no");
             const product_no = param(query, "product_no");
             const [result] = await pool.query(`
-                SELECT
-                a.no AS "order_no",
+                SELECT 
+                a.no AS reservation_no,
                 a.user_no,
-                a.purchase_quantity,
-                b.name AS "user_name",
-                b.phone
-                FROM orders AS a
-                INNER JOIN users AS b
-                ON a.user_no = b.no
-                WHERE a.status = "pre_bid"
-                AND a.shop_no = ?
-                AND a.product_no = ?;
+                a.shop_no,
+                a.product_no,
+                a.depositor_name,
+                a.account_number,
+                a.total_purchase_quantity,
+                a.total_purchase_price,
+                b.name AS "product_name",
+                c.name AS "user_name",
+                c.phone,
+                a.created_datetime
+                FROM reservations AS a
+                INNER JOIN products AS b
+                ON a.product_no = b.no
+                INNER JOIN users AS c
+                ON a.user_no = c.no 
+                WHERE
+                a.shop_no = ?
+                AND a.product_no = ?
+                AND a.enabled = 1
+                ORDER BY a.created_datetime ASC;
 
                 SELECT
-                a.no,
-                a.name,
+                a.no AS product_no,
+                a.name AS product_name,
                 a.expected_quantity,
                 a.rest_quantity,
                 a.regular_price,
@@ -267,7 +295,8 @@ const controller = {
                 INNER JOIN product_images AS b
                 ON a.no = b.product_no
                 WHERE
-                a.expiry_datetime > NOW()
+                a.expiry_datetime < NOW()
+                AND a.status = 'ongoing'
                 AND a.shop_no = ?
                 AND a.no = ?
                 GROUP BY b.product_no
@@ -301,33 +330,137 @@ const controller = {
 
             if (result[0].expected_quantity < actual_quantity) throw err.BadRequest("예상 재고수 보다 많이 입력");
 
-            const reserved_quantity = result[0].expected_quantity - result[0].rest_quantity;
-            const order_amount = result[0].order_amount;
-            // actual >= reserved_quantity -> 그냥 모두 픽업처리
-            // actual < reserved_quantity -> 선착순으로 픽업 나머지 환급
-            if (reserved_quantity > actual_quantity) {
-                await pool.query(`
-                    UPDATE orders SET
-                    status = "pre_pickup"
-                    WHERE no IN
-                        (
-                            SELECT no
-                            FROM orders
-                            WHERE
-                            prodcut_no = ?
-                            AND enabled = 1
-                            ORDER BY create_datetime DESC
-                            LIMIT ?
-                        )
-                     
-                `, [product_no, order_amount]);
-            } else if (reserved_quantity <= actual_quantity) {
+            await pool.query(`
+                UPDATE products SET
+                actual_quantity = ?
+                WHERE no = ?
+            `, [actual_quantity, product_no]);
 
+            const reserved_quantity = result[0].expected_quantity - result[0].rest_quantity;
+            // actual >= reserved_quantity(예약 완료된 재고) -> 그냥 모두 픽업처리
+            // actual < reserved_quantity -> 선착순으로 픽업 나머지 환급
+
+
+            const [result1] = await pool.query(`
+                    SELECT
+                    a.no AS 'reservation_no',
+                    a.user_no,
+                    a.product_no,
+                    a.shop_no,
+                    a.depositor_name,
+                    a.account_number,
+                    a.total_purchase_quantity,
+                    a.total_purchase_price,
+                    a.status,
+                    b.expected_quantity,
+                    b.actual_quantity,
+                    b.rest_quantity,
+                    b.regular_price,
+                    b.discounted_price,
+                    b.return_price,
+                    c.name,
+                    c.phone
+                    FROM reservations AS a
+                    INNER JOIN products AS b
+                    ON a.product_no = b.no
+                    INNER JOIN users AS c
+                    ON a.user_no = c.no
+                    WHERE
+                    a.product_no = ?
+                    AND a.enabled = 1
+                    ORDER BY a.created_datetime ASC
+
+                `, [product_no]);
+            // 실재고보다 예약한 재고가 더 많은 경우
+            let for_check_quantity = actual_quantity;
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                if (reserved_quantity > actual_quantity) {
+
+                    for (let i = 0; i < result1.length; i++) {
+                        let temp_reserved_quantity = result1[i].total_purchase_quantity;
+                        // 싹 다 픽업 처리(실재고가 예약 주문보다 많은 경우)
+                        if (for_check_quantity >= temp_reserved_quantity) {
+                            console.log(result1[i].reservation_no, result1[i].user_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0);
+                            await connection.query(`
+                            INSERT INTO orders (
+                                reservation_no,
+                                product_no,
+                                user_no,
+                                shop_no,
+                                purchase_quantity,
+                                purchase_price,
+                                return_price,
+                                status
+                            )
+                            VALUES
+                            (?,?,?,?,?,?,?,"pre_pickup")
+                            `, [
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0
+                            ]);
+
+                        }
+                        // 부분 픽업/환급 처리(실재고가 예약 주문보다 적은 경우)
+                        else if (for_check_quantity < temp_reserved_quantity) {
+                            const temp_return_quantity = temp_reserved_quantity - for_check_quantity;
+                            const temp_pickup_quantity = for_check_quantity;
+                            await connection.query(`
+                                INSERT INTO orders (
+                                    reservation_no,
+                                    product_no,
+                                    user_no,
+                                    shop_no,
+                                    purchase_quantity,
+                                    purchase_price,
+                                    return_price,
+                                    status
+                                )
+                                VALUES
+                                (?,?,?,?,?,?,?,"pre_pickup"),
+                                (?,?,?,?,?,?,?,"pre_return")
+                            `, [
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
+                            ]);
+
+                        }
+                        for_check_quantity -= temp_reserved_quantity;
+
+                    }
+                    // 예약 총 재고 보다 총 실재고가 많은경우 
+                } else if (reserved_quantity <= actual_quantity) {
+                    for (let i = 0; i < result1.length; i++) {
+                        let temp_reserved_quantity = result1[i].total_purchase_quantity;
+                        await connection.query(`
+                            INSERT INTO orders (
+                                reservation_no,
+                                product_no,
+                                user_no,
+                                shop_no,
+                                purchase_quantity,
+                                purchase_price,
+                                return_price,
+                                status
+                            )
+                            VALUES
+                            (?,?,?,?,?,?,?,"pre_pickup")
+                            `, [
+                            result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0,
+                        ]);
+
+                        for_check_quantity -= temp_reserved_quantity;
+                    }
+                }
+                await connection.commit();
+                next({ message: "ping" });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
             }
 
-
-            console.log(result);
-            next({ message: "ping" });
         } catch (e) {
             next(e);
         }
