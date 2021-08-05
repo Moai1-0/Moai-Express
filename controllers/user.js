@@ -4,6 +4,9 @@ require('dayjs/locale/ko');
 dayjs.locale('ko');
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
+const { genSaltSync, hashSync, compareSync } = require('bcrypt');
+const check = require('../utils/check');
+
 
 const PAGINATION_COUNT = 10;
 
@@ -108,11 +111,130 @@ const controller = {
             next(e);
         }
     },
+    async signup({ body }, { pool }, next) {
+        try {
+            /**
+             * 임시 코드
+             */
+            const type = param(body, 'type', 'normal');
+            condition.contains(type, [ 'normal', 'kakao', 'naver', 'facebook', 'google', 'apple' ]);
+            const email = param(body, 'email');
+            const password = type === 'normal' ? param(body, 'password') : null;
+            const sns_id = type !== 'normal' ? param(body, 'sns_id') : null;
+            const name = param(body, 'name');
+            const phone = param(body, 'phone');
+            const birthday = param(body, 'birthday', birthday => parser.emptyToNull(birthday));
+            const gender = param(body, 'gender', null);
+            condition.contains(gender, [ 'male', 'female', 'etc', null ]);
+            const bank = param(body, 'bank'); // https://superad.tistory.com/229 (개설기관 표준코드)
+            // condition check needed
+            const account_number = param(body, 'account_number');
+            // account_number check needed
+
+            let salt = null;
+            let hashedPassword = null;
+            
+            if (!check.phone(phone)) throw err(400, `핸드폰 번호가 올바르지 않습니다. 핸드폰 번호를 확인하세요.`);
+            if (!check.email(email)) throw err(400, `이메일을 정확히 입력하세요.`);
+            if (password) {
+                if (!check.password(password)) throw err(400, `패스워드를 정확히 입력하세요.`);
+                salt = genSaltSync(10);
+                hashedPassword = hashSync(password, salt);
+            }
+
+            const [ results1 ] = await pool.query(`
+            SELECT
+            COUNT(*) AS 'count'
+            FROM users
+            WHERE enabled = 1
+            AND phone = ?;
+
+            SELECT
+            COUNT(*) AS 'count'
+            FROM users
+            WHERE enabled = 1
+            AND email = ?;
+
+            SELECT
+            COUNT(*) AS 'count'
+            FROM users AS a
+            JOIN user_sns_data AS b
+            ON a.no = b.user_no
+            WHERE b.id = ?
+            AND b.type = ?
+            AND a.enabled = 1
+            AND b.enabled = 1;
+            `, [ phone, email, sns_id, type ]);
+
+            if (results1[0][0].count > 0) throw err(400, `이미 가입된 핸드폰 번호입니다. 다른 핸드폰 번호를 입력하세요.`);
+            if (results1[1][0].count > 0) throw err(400, `이미 가입된 이메일 입니다. 다른 이메일을 입력하세요.`);
+            if (results1[2][0].count > 0) throw err(400, `이미 가입된 ${type} 계정 입니다. 다른 계정을 통해 가입을 진행하세요.`);
+
+            let user_no = null;
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                if (type === 'normal') {
+                    const [ result ] = await connection.query(`
+                        INSERT INTO users (
+                            email,
+                            password,
+                            phone,
+                            name,
+                            birthday,
+                            gender
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?);
+                    `, [ email, hashedPassword, phone, name, birthday, gender ]);
+                    user_no = result.insertId;
+                } else {
+                    const [ result ] = await connection.query(`
+                        INSERT INTO users (
+                            email,
+                            phone,
+                            name,
+                            birthday,
+                            gender
+                        )
+                        VALUES
+                        (?, ?, ?, ?, ?);
+                    `, [ email, phone, name, birthday, gender ]);
+                    await connection.query(`
+                        INSERT INTO user_sns_data (user_no, type, id) 
+                        VALUES
+                        (?, ?, ?);
+                    `, [ result.insertId, type, sns_id ]);
+                    user_no = result.insertId;
+                }
+                await connection.query(`
+                    INSERT INTO accounts (
+                        user_no,
+                        bank,
+                        account_number
+                    )
+                    VALUES
+                    (?, ?, ?);
+                `, [ user_no, bank, account_number ]);
+                await connection.query(`
+                    INSERT INTO point_accounts (user_no)
+                    VALUES (?)
+                `, [ user_no ]);
+
+                await connection.commit();
+                next({ message: "가입되었습니다." });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();}
+        } catch (e) {
+            next(e);
+        }
+    },
     async reserveProduct({ body }, { pool }, next) {
         try {
             /**
              * 임시 코드
-             * 로그, 계좌번호 체크 추가
              */
             const name = param(body, 'name');
             const phone = param(body, 'phone');
@@ -120,13 +242,8 @@ const controller = {
             const product_no = param(body, 'product_no');
             const depositor_name = param(body, 'depositor_name');
             const account_number = param(body, 'account_number');
-            // const bank = param(body, 'bank'); // https://superad.tistory.com/229 (개설기관 표준코드)
-            // const first_registration_number = param(body, 'first_registration_number');
             const total_purchase_quantity = param(body, 'total_purchase_quantity');
             const total_purchase_price = param(body, 'total_purchase_price');
-            /**
-             * 계좌번호 체크
-             */
             const [ result1 ] = await pool.query(`
                 SELECT *
                 FROM users
@@ -135,9 +252,9 @@ const controller = {
                 AND enabled = 1;
             `, [ phone, name ]);
             
-            const connection = await pool.getConnection(async conn => conn);
+            const connection = await pool.getConnection(async conn => await conn);
             try {
-                let user_no;
+                let user_no = null;
                 await connection.beginTransaction();
 
                 if (result1[0].length < 1) {
@@ -175,7 +292,7 @@ const controller = {
                     VALUES (?, ?, ?, ?, ?, ?, ?);
                 `, [ user_no, shop_no, product_no, depositor_name, account_number, total_purchase_quantity, total_purchase_price ]);
                 
-                await connection.query(`
+                await connectionx.query(`
                     UPDATE
                     products
                     SET rest_quantity = rest_quantity - ?
@@ -213,7 +330,7 @@ const controller = {
             if (result.length < 1 || result[0].status === 'canceled') throw err(400);
             if (result[0].user_no !== user_no) throw err(401);
             
-            const connection = await pool.getConnection(async conn => conn);
+            const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
                 await connection.query(`
