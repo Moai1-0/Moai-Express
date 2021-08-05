@@ -195,6 +195,47 @@ const controller = {
             next(e);            
         }
     },
+    async cancelReservation({ user, body }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+            const reservation_no = param(body, 'reservation_no');
+
+            const [ result ] = await pool.query(`
+                SELECT
+                user_no,
+                status
+                FROM
+                reservations
+                WHERE no = ?
+                AND enabled = 1;
+            `, [ reservation_no ]);
+
+            if (result.length < 1 || result[0].status === 'canceled') throw err(400);
+            if (result[0].user_no !== user_no) throw err(401);
+            
+            const connection = await pool.getConnection(async conn => conn);
+            try {
+                await connection.beginTransaction();
+                await connection.query(`
+                    UPDATE
+                    reservations
+                    SET status = 'canceled'
+                    WHERE no = ?
+                    AND enabled = 1
+                `, [reservation_no]);
+                
+                await connection.commit();
+                next({ message: "취소되었습니다." });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+        } catch (e) {
+            next(e);
+        }
+    },
     async confirmUser({ body }, { pool }, next) {
         try {
             const name = param(body, 'name');
@@ -206,7 +247,7 @@ const controller = {
                 FROM users
                 WHERE phone = ?
                 AND name = ?
-                enabled = 1;
+                AND enabled = 1;
             `, [phone, name]);
 
             if (result[0].length < 1) throw err(400, `이름 또는 전화번호가 일치하지 않습니다.`);
@@ -310,7 +351,7 @@ const controller = {
         } catch (e) {
             next(e);
         }
-    }
+    },
 }
 
 module.exports = controller;
