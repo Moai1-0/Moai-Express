@@ -100,7 +100,7 @@ const controller = {
                     FROM shops 
                 WHERE enabled = 1
                 AND id = ?;
-                    `, [id, password]);
+                    `, [id]);
             const accountValid = compareSync(password.toString(), results[0].password);
             if (results.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
 

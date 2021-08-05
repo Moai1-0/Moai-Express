@@ -6,6 +6,7 @@ const { checkUser } = require('../middlewares/auth');
 router.get('/products', user.getProducts); // 상품 리스트 조회
 router.get('/product', user.getProduct); // 상품 상세 조회
 router.post('/signup', user.signup); // 회원가입
+router.post('/signin', user.signin); // 로그인
 router.post('/reserve', user.reserveProduct); // 상품 예약
 router.patch('/reserve', checkUser, user.cancelReservation); // 상품 예약 취소
 router.post('/history/confirm', user.confirmUser); // 구매내역 - 로그인
