@@ -1,4 +1,4 @@
-const check = {
+module.exports = {
     /**
      * 기본 8자리 이상 입력
      * level1: 영어소문자/숫자
@@ -6,13 +6,13 @@ const check = {
      * level3: 영어대문자/소문자/숫자/특수문자
      **/
     password(password, level = 3) {
-        let regExp = /^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{8,}$/;
+        let regExp = /^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[~#?!@$%^&*-]).{8,}$/;
         switch (level) {
             case 1:
                 regExp = /^(?=.*?[a-z])(?=.*?[0-9]).{8,}$/;
                 break
             case 2:
-                regExp = /^(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{8,}$/;
+                regExp = /^(?=.*?[a-z])(?=.*?[0-9])(?=.*?[~#?!@$%^&*-]).{8,}$/;
                 break
         }
         return regExp.test(password);
