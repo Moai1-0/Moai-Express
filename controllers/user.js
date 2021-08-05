@@ -217,7 +217,7 @@ const controller = {
                 `, [ user_no, bank, account_number ]);
                 await connection.query(`
                     INSERT INTO point_accounts (user_no)
-                    VALUES (?)
+                    VALUES (?);
                 `, [ user_no ]);
 
                 await connection.commit();
@@ -227,6 +227,63 @@ const controller = {
                 next(e);
             } finally {
                 connection.release();}
+        } catch (e) {
+            next(e);
+        }
+    },
+    async signin({ body }, { pool }, next) {
+        try {
+            const type = param(body, 'type', 'normal')
+            condition.contains(type, [ 'normal', 'kakao', 'naver', 'facebook', 'google', 'apple' ])
+            const email = param(body, 'email', email => parser.emptyToNull(email))
+            const password = param(body, 'password', password => parser.emptyToNull(password))
+            const sns_id = type !== 'normal' ? param(body, 'sns_id') : null
+
+            if (type === 'normal') {
+                const [ result ] = await pool.query(`
+                    SELECT
+                    no AS user_no,
+                    email,
+                    password
+                    FROM users
+                    WHERE email = ?
+                    AND enabled = 1;
+                `, [ email ]);
+
+                const isValid = compareSync(password.toString(), result[0].password);
+                if (result.length < 1 || !isValid) throw err(400, `아이디 또는 비밀번호가 일치하지 않습니다.`);
+
+                const token = encodeToken({
+                    type: `user`,
+                    user_no: result[0].user_no,
+                    email: result[0].email 
+                }, { expiresIn: '1d' });
+                
+                next({ token });
+            } else {
+                const [ results ] = await pool.query(`
+                    SELECT
+                    a.no AS 'user_no',
+                    a.email
+                    FROM users AS a
+                    JOIN user_sns_data AS b
+                    ON a.no = b.user_no
+                    WHERE b.id = ?
+                    AND b.type = ?
+                    AND a.enabled = 1
+                    AND b.enabled = 1;
+                `, [ sns_id, type ])
+
+                if (results.length < 1) throw err(400, `${type} 계정을 통해 가입된 이력이 없습니다.`)
+
+                const token = encodeToken({
+                    type: `user`,
+                    user_no: results[0].user_no,
+                    email: results[0].email
+                }, { expiresIn: '1d' });
+
+                next({ token });
+            }
         } catch (e) {
             next(e);
         }
