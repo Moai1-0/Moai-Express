@@ -16,6 +16,7 @@ const controller = {
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
+            
             const [ results ] = await pool.query(`
                 SELECT
                 COUNT(*) AS total_count
@@ -24,13 +25,14 @@ const controller = {
 
                 SELECT
                 p.no AS product_no,
-                i.path,
-                p.shop_no,
-                p.name AS prduct_name,
+                p.name AS product_name,
                 p.rest_quantity,
                 p.regular_price,
                 p.discounted_price,
-                p.expiry_datetime
+                p.expiry_datetime,
+                s.no AS shop_no,
+                s.name AS shop_name,
+                i.path
                 FROM products AS p
                 LEFT JOIN (
                     SELECT
@@ -41,8 +43,16 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
+                JOIN (
+                    SELECT
+                    no,
+                    name
+                    FROM shops
+                    WHERE enabled = 1
+                ) AS s
+                ON p.shop_no = s.no
                 WHERE p.enabled = 1
-                ORDER BY p.created_datetime
+                ORDER BY p.created_datetime DESC
                 LIMIT ? OFFSET ?;
             `, [ count, offset ]);
 
@@ -106,6 +116,226 @@ const controller = {
                 expiry_datetime: dayjs(result[0].expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
                 pickup_datetime: dayjs(result[0].pickup_datetime).format(`M월 D일(ddd) a h시 m분`),
                 impending: dayjs(result[0].expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
+            });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async searchProducts({ query }, { pool }, next) {
+        try {
+            const q = param(query, 'q');
+            const page = Number(param(query, 'page', 0));
+            const count = Number(param(query, 'count', PAGINATION_COUNT));
+            const offset = count * page;
+            console.log(q);
+            const [ results ] = await pool.query(`
+                SELECT
+                COUNT(*) AS total_count
+                FROM (
+                    SELECT * FROM (
+                        SELECT
+                        p.no AS product_no,
+                        p.name AS product_name,
+                        p.rest_quantity,
+                        p.regular_price,
+                        p.discounted_price,
+                        p.expiry_datetime,
+                        i.path,
+                        s.no AS shop_no,
+                        s.name AS shop_name
+                        FROM (
+                            SELECT
+                            no,
+                            name,
+                            shop_no,
+                            rest_quantity,
+                            regular_price,
+                            discounted_price,
+                            expiry_datetime
+                            FROM products
+                            WHERE MATCH(name)
+                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AND enabled = 1
+                        ) AS p
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no
+                        JOIN (
+                            SELECT
+                            no,
+                            name
+                            FROM shops
+                            WHERE enabled = 1
+                        ) AS s
+                        ON p.shop_no = s.no
+                    ) AS by_product_name
+                    UNION
+                    SELECT * FROM (
+                        SELECT
+                        p.no AS product_no,
+                        p.name AS product_name,
+                        p.rest_quantity,
+                        p.regular_price,
+                        p.discounted_price,
+                        p.expiry_datetime,
+                        i.path,
+                        s.no AS shop_no,
+                        s.name AS shop_name
+                        FROM (
+                            SELECT
+                            no,
+                            name,
+                            shop_no,
+                            rest_quantity,
+                            regular_price,
+                            discounted_price,
+                            expiry_datetime
+                            FROM products
+                            WHERE enabled = 1
+                        ) AS p
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no
+                        JOIN (
+                            SELECT
+                            no,
+                            name
+                            FROM shops
+                            WHERE MATCH(name)
+                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AND enabled = 1
+                        ) AS s
+                        ON p.shop_no = s.no
+                    ) AS by_shop_name
+                ) AS matched_products;
+
+                SELECT
+                product_no,
+                product_name,
+                rest_quantity,
+                regular_price,
+                discounted_price,
+                expiry_datetime,
+                path,
+                shop_no,
+                shop_name
+                FROM (
+                    SELECT * FROM (
+                        SELECT
+                        p.no AS product_no,
+                        p.name AS product_name,
+                        p.rest_quantity,
+                        p.regular_price,
+                        p.discounted_price,
+                        p.expiry_datetime,
+                        p.created_datetime,
+                        i.path,
+                        s.no AS shop_no,
+                        s.name AS shop_name
+                        FROM (
+                            SELECT
+                            no,
+                            name,
+                            shop_no,
+                            rest_quantity,
+                            regular_price,
+                            discounted_price,
+                            expiry_datetime,
+                            created_datetime
+                            FROM products
+                            WHERE MATCH(name)
+                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AND enabled = 1
+                        ) AS p
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no
+                        JOIN (
+                            SELECT
+                            no,
+                            name
+                            FROM shops
+                            WHERE enabled = 1
+                        ) AS s
+                        ON p.shop_no = s.no
+                    ) AS by_product_name
+                    UNION
+                    SELECT * FROM (
+                        SELECT
+                        p.no AS product_no,
+                        p.name AS product_name,
+                        p.rest_quantity,
+                        p.regular_price,
+                        p.discounted_price,
+                        p.expiry_datetime,
+                        p.created_datetime,
+                        i.path,
+                        s.no AS shop_no,
+                        s.name AS shop_name
+                        FROM (
+                            SELECT
+                            no,
+                            name,
+                            shop_no,
+                            rest_quantity,
+                            regular_price,
+                            discounted_price,
+                            expiry_datetime,
+                            created_datetime
+                            FROM products
+                            WHERE enabled = 1
+                        ) AS p
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no
+                        JOIN (
+                            SELECT
+                            no,
+                            name
+                            FROM shops
+                            WHERE MATCH(name)
+                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AND enabled = 1
+                        ) AS s
+                        ON p.shop_no = s.no
+                    ) AS by_shop_name
+                )  AS matched_products
+                ORDER BY created_datetime DESC
+                LIMIT ? OFFSET ?;
+            `, [ count, offset ]);
+            
+            next({
+                total_count: results[0][0].total_count,
+                products: results[1].map((product) => ({
+                    ...product,
+                    discount_rate: product.discounted_price / product.regular_price * 100,
+                    expiry_datetime: dayjs(product.expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
+                    impending: dayjs(product.expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
+                }))
             });
         } catch (e) {
             next(e);
