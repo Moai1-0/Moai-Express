@@ -154,7 +154,7 @@ const controller = {
                             expiry_datetime
                             FROM products
                             WHERE MATCH(name)
-                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AGAINST(${pool.escape(q)})
                             AND enabled = 1
                         ) AS p
                         LEFT JOIN (
@@ -214,7 +214,7 @@ const controller = {
                             name
                             FROM shops
                             WHERE MATCH(name)
-                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AGAINST(${pool.escape(q)})
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
@@ -256,7 +256,7 @@ const controller = {
                             created_datetime
                             FROM products
                             WHERE MATCH(name)
-                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AGAINST(${pool.escape(q)})
                             AND enabled = 1
                         ) AS p
                         LEFT JOIN (
@@ -318,7 +318,7 @@ const controller = {
                             name
                             FROM shops
                             WHERE MATCH(name)
-                            AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AGAINST(${pool.escape(q)})
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
