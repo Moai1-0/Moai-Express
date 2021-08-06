@@ -90,6 +90,45 @@ const controller = {
             next(e);
         }
     },
+    async getBookmarkProducts({ shop, body, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+
+            const [result] = await pool.query(`
+                SELECT 
+                a.no AS product_bookmark_no,
+                a.shop_no,
+                a.product_no,
+                b.name,
+                b.description,
+                b.expected_quantity,
+                b.regular_price,
+                b.discounted_price,
+                b.expiry_datetime,
+                b.pickup_datetime,
+                b.return_price
+                FROM product_bookmark AS a
+                INNER JOIN products AS b
+                ON a.product_no = b.no
+                INNER JOIN shops AS c
+                ON a.shop_no = c.no
+                WHERE a.shop_no = ?
+        
+            `, [shop_no]);
+
+            next(
+                result.map(product =>
+                ({
+                    ...product,
+                    pickup_datetime: dayjs(product.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    expiry_datetime: dayjs(product.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                }))
+
+            );
+        } catch (e) {
+            next(e);
+        }
+    },
     async signin({ body }, { pool }, next) {
         try {
             const id = param(body, "id");
@@ -251,6 +290,109 @@ const controller = {
         }
     },
     async getBidProduct({ shop, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const product_no = param(query, "product_no");
+            const [result] = await pool.query(`
+                SELECT 
+                a.no AS reservation_no,
+                a.user_no,
+                a.shop_no,
+                a.product_no,
+                a.depositor_name,
+                a.total_purchase_quantity,
+                a.total_purchase_price,
+                b.name AS "product_name",
+                c.name AS "user_name",
+                c.phone,
+                a.created_datetime
+                FROM reservations AS a
+                INNER JOIN products AS b
+                ON a.product_no = b.no
+                INNER JOIN users AS c
+                ON a.user_no = c.no 
+                WHERE
+                a.shop_no = ?
+                AND a.product_no = ?
+                AND a.enabled = 1
+                ORDER BY a.created_datetime ASC;
+
+                SELECT
+                a.no AS product_no,
+                a.name AS product_name,
+                a.expected_quantity,
+                a.rest_quantity,
+                a.regular_price,
+                a.discounted_price,
+                a.pickup_datetime,
+                a.expiry_datetime,
+                b.sort,
+                GROUP_CONCAT(path) AS "product_images"
+                FROM products AS a
+                INNER JOIN product_images AS b
+                ON a.no = b.product_no
+                WHERE
+                a.expiry_datetime < NOW()
+                AND a.shop_no = ?
+                AND a.no = ?
+                GROUP BY b.product_no
+            `, [shop_no, product_no, shop_no, product_no]);
+            if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
+            next({
+                product: {
+                    ...result[1][0],
+                    pickup_datetime: dayjs(result[1][0].pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item)
+                },
+                orders: result[0]
+            });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getCompleteProducts({ shop, body, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+
+            const [result] = await pool.query(`
+                    SELECT
+                    a.no,
+                    a.name,
+                    a.expected_quantity,
+                    a.actual_quantity,
+                    a.rest_quantity,
+                    a.regular_price,
+                    a.discounted_price,
+                    a.pickup_datetime,
+                    a.expiry_datetime,
+                    b.sort,
+                    GROUP_CONCAT(path) AS "product_images"
+                    FROM products AS a
+                    INNER JOIN product_images AS b
+                    ON a.no = b.product_no
+                    WHERE
+                    a.shop_no = ?
+                    AND a.expiry_datetime < NOW()
+                    AND a.status = 'done'
+                    AND a.enabled = 1
+                    GROUP BY b.product_no
+                    `, [shop_no]);
+
+            next(result.map(item => ({
+                ...item,
+                pickup_datetime: dayjs(item.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                product_images: item.product_images.split(',').map(item => S3_URL + item)
+            })));
+
+
+            next({ message: "ping" });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getCompleteProduct({ shop, query }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
             const product_no = param(query, "product_no");
