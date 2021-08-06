@@ -13,5 +13,4 @@ router.patch('/reserve', checkUser, user.cancelReservation); // 상품 예약 �
 router.get('/history/ongoing', checkUser, user.getReservationHistory) // 구매내역 - 진행중
 router.get('/history/done', checkUser, user.getPurchaseHistory) // 구매내역 - 수령/환급
 
-
 module.exports = router;
