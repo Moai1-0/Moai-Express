@@ -101,7 +101,7 @@ const controller = {
                     FROM shops 
                     WHERE enabled = 1
                     AND id = ?;
-                    `, [id, password]);
+                    `, [id]);
             const accountValid = compareSync(password.toString(), results[0].password);
             if (results.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
 
@@ -160,7 +160,6 @@ const controller = {
                 a.shop_no,
                 a.product_no,
                 a.depositor_name,
-                a.account_number,
                 a.total_purchase_quantity,
                 a.total_purchase_price,
                 b.name AS "product_name",
@@ -262,7 +261,6 @@ const controller = {
                 a.shop_no,
                 a.product_no,
                 a.depositor_name,
-                a.account_number,
                 a.total_purchase_quantity,
                 a.total_purchase_price,
                 b.name AS "product_name",
@@ -296,12 +294,11 @@ const controller = {
                 ON a.no = b.product_no
                 WHERE
                 a.expiry_datetime < NOW()
-                AND a.status = 'ongoing'
                 AND a.shop_no = ?
                 AND a.no = ?
                 GROUP BY b.product_no
             `, [shop_no, product_no, shop_no, product_no]);
-
+            if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
             next({
                 product: {
                     ...result[1][0],
@@ -348,7 +345,6 @@ const controller = {
                     a.product_no,
                     a.shop_no,
                     a.depositor_name,
-                    a.account_number,
                     a.total_purchase_quantity,
                     a.total_purchase_price,
                     a.status,
@@ -423,6 +419,12 @@ const controller = {
                                 result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
                                 result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
                             ]);
+                            await connection.query(`
+                                UPDATE point_accounts SET
+                                point = point + ?
+                                WHERE user_no = ?
+                            `, [result1[i].return_price * temp_return_quantity, result1[i].user_no]);
+
 
                         }
                         for_check_quantity -= temp_reserved_quantity;
@@ -465,6 +467,83 @@ const controller = {
             next(e);
         }
     },
+    async setPickup({ shop, body }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const product_no = param(body, "product_no");
+            const order_no = param(body, 'order_no');
+            const reservation_no = param(body, 'reservation_no');
+
+
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                await connection.query(`
+                    UPDATE orders SET
+                    status = 'pickup'
+                    WHERE
+                    no = ?
+                `, [order_no]);
+
+                const [result1] = await connection.query(`
+					SELECT
+					COUNT(*) AS count
+                    FROM
+                    orders
+                    WHERE
+                    reservation_no = ?
+					AND (status = 'pre_pickup' or status ="pre_return")
+                `, [reservation_no]);
+
+                if (result1[0].count <= 0) {
+                    await connection.query(`
+                        UPDATE reservations
+                        SET status = "done"
+                        WHERE
+                        no = ?
+                    `, [reservation_no]);
+
+                    const [result2] = await connection.query(`
+                        SELECT
+                        COUNT(*) AS count
+                        FROM
+                        reservations
+                        WHERE
+                        product_no = ?
+                        AND status = 'ongoing'
+                    `, [product_no]);
+
+                    if (result2[0].count <= 0) {
+                        await connection.query(`
+                            UPDATE products
+                            SET status = "done"
+                            WHERE
+                            no = ?
+                        `, [product_no]);
+                    }
+                }
+                // for (let i = 0; i < result1.length; i++) {
+                //     const temp = result1[i];
+                //     if (temp.status === "pre_pickup" || temp.status === "pre_return") {
+                //         next({ message: "ping" });
+                //     }
+                // }
+
+
+                await connection.commit();
+                next({ message: "ping" });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+
+        } catch (e) {
+            next(e);
+        }
+    },
+
     // 임시 api
     async signup({ body }, { pool }, next) {
         try {
@@ -527,7 +606,27 @@ const controller = {
         } catch (e) {
             next(e);
         }
-    }
+    },
+    async controllerFormat({ shop, body, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                await connection.query(``);
+                await connection.commit();
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+            next({ message: "ping" });
+        } catch (e) {
+            next(e);
+        }
+    },
 };
 
 module.exports = controller;
