@@ -129,6 +129,25 @@ const controller = {
             next(e);
         }
     },
+    async deleteBookmarkProduct({ shop, body }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const product_bookmark_no = param(body, 'product_bookmark_no');
+
+            const [result] = await pool.query(`
+                UPDATE product_bookmark
+                SET
+                enabled = 0,
+                removed_datetime = NOW()
+                WHERE
+                no = ?
+            `, [product_bookmark_no]);
+
+            next({ message: 'good' });
+        } catch (e) {
+            next(e);
+        }
+    },
     async signin({ body }, { pool }, next) {
         try {
             const id = param(body, "id");

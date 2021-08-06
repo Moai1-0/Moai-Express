@@ -11,9 +11,8 @@ router.post('/product'
     , s3upload.array('product_images')
     , shop.uploadProduct
 );
-router.get('/products/bookmark', checkShop,shop.getBookmarkProducts);
-router.get('/product/bookmark', checkShop);
-router.delete('/product/bookmark', checkShop);
+router.get('/products/bookmark', checkShop, shop.getBookmarkProducts);
+router.delete('/product/bookmark', checkShop, shop.deleteBookmarkProduct);
 router.get('/products/prebid', checkShop, shop.getPrebidProducts);
 router.get('/products/prebid/detail', checkShop, shop.getPrebidProduct);
 router.get('/products/bid', checkShop, shop.getBidProducts);
