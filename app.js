@@ -22,6 +22,12 @@ app.use(cors({ credentials: true, origin: true }));
 // Custom Middlewares
 app.use(sql(config.mysql), );
 
+// Passport
+const passport = require('passport');
+const passportConfig = require('./passport/passport');
+app.use(passport.initialize());
+passportConfig()
+
 // Rest API
 app.use('/', require('./routes/common'));
 app.use('/shop', require('./routes/shop'));
