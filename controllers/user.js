@@ -617,28 +617,6 @@ const controller = {
             next(e);
         }
     },
-    async confirmUser({ body }, { pool }, next) {
-        try {
-            const name = param(body, 'name');
-            const phone = param(body, 'phone'); // DB 내 phone에 인덱스 설정 필요
-
-            const [ result ] = await pool.query(`
-                SELECT
-                no AS user_no
-                FROM users
-                WHERE phone = ?
-                AND name = ?
-                AND enabled = 1;
-            `, [phone, name]);
-
-            if (result[0].length < 1) throw err(400, `이름 또는 전화번호가 일치하지 않습니다.`);
-            const token = encodeToken({ type: `customer`, user_no: result[0].user_no }, { expiresIn: '10m' });
-
-            next({ token });
-        } catch (e) {
-            next(e);
-        }
-    },
     async getReservationHistory({ user }, { pool }, next) {
         try {
             /**
