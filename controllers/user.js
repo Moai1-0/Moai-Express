@@ -261,7 +261,7 @@ const controller = {
                 
                 next({ token });
             } else {
-                const [ results ] = await pool.query(`
+                const [ result ] = await pool.query(`
                     SELECT
                     a.no AS 'user_no',
                     a.email
@@ -274,12 +274,12 @@ const controller = {
                     AND b.enabled = 1;
                 `, [ sns_id, type ])
 
-                if (results.length < 1) throw err(400, `${type} 계정을 통해 가입된 이력이 없습니다.`)
+                if (result.length < 1) throw err(400, `${type} 계정을 통해 가입된 이력이 없습니다.`)
 
                 const token = encodeToken({
                     type: `user`,
-                    user_no: results[0].user_no,
-                    email: results[0].email
+                    user_no: result[0].user_no,
+                    email: result[0].email
                 }, { expiresIn: '1d' });
 
                 next({ token });
@@ -288,45 +288,23 @@ const controller = {
             next(e);
         }
     },
-    async reserveProduct({ body }, { pool }, next) {
+    async reserveProduct({ user, body }, { pool }, next) {
         try {
             /**
              * 임시 코드
              */
-            const name = param(body, 'name');
-            const phone = param(body, 'phone');
+            const user_no = auth(user, 'user_no');
             const shop_no = param(body, 'shop_no');
             const product_no = param(body, 'product_no');
             const depositor_name = param(body, 'depositor_name');
-            const account_number = param(body, 'account_number');
             const total_purchase_quantity = param(body, 'total_purchase_quantity');
             const total_purchase_price = param(body, 'total_purchase_price');
-            const [ result1 ] = await pool.query(`
-                SELECT *
-                FROM users
-                WHERE phone = ?
-                AND name = ?
-                AND enabled = 1;
-            `, [ phone, name ]);
             
             const connection = await pool.getConnection(async conn => await conn);
             try {
-                let user_no = null;
                 await connection.beginTransaction();
 
-                if (result1[0].length < 1) {
-                    const [ result2 ] = await connection.query(`
-                        INSERT INTO users (
-                            name,
-                            phone
-                        )
-                        VALUES (?, ?);
-                    `, [ name, phone ]);
-                    user_no = result2.insertId;
-                } else {
-                    user_no = result1[0].no;
-                }
-                const [ result3 ] = await connection.query(`
+                const [ result ] = await connection.query(`
                     SELECT
                     rest_quantity
                     FROM products
@@ -334,7 +312,7 @@ const controller = {
                     AND enabled = 1;
                 `, [ product_no ]);
 
-                if (result3[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
+                if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
 
                 await connection.query(`
                     INSERT INTO reservations (
@@ -342,14 +320,13 @@ const controller = {
                         shop_no,
                         product_no,
                         depositor_name,
-                        account_number,
                         total_purchase_quantity,
                         total_purchase_price
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
-                `, [ user_no, shop_no, product_no, depositor_name, account_number, total_purchase_quantity, total_purchase_price ]);
+                    VALUES (?, ?, ?, ?, ?, ?);
+                `, [ user_no, shop_no, product_no, depositor_name, total_purchase_quantity, total_purchase_price ]);
                 
-                await connectionx.query(`
+                await connection.query(`
                     UPDATE
                     products
                     SET rest_quantity = rest_quantity - ?
