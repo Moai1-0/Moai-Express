@@ -7,13 +7,10 @@ router.get('/', common.main);
 router.get('/ping', common.ping);
 
 router.get('/kakao', passport.authenticate('kakao-login'));
-router.get('/kakao/oauth',
+router.get(
+    '/kakao/oauth',
     passport.authenticate('kakao-login', { failureRedirect: '/kakao' }),
-    ({ user }, { pool }, next) => {
-        const { profile, accessToken, refreshToken } = user;
-
-        next({ message: 'test' });
-    }
+    common.signupWithKakao
 );
 
 
