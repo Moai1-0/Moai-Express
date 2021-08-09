@@ -711,7 +711,7 @@ const controller = {
             next(e);
         }
     },
-    async getRemainingPoint({ user, query }, { pool }, next) {
+    async getRemainingPoint({ user }, { pool }, next) {
         try {
             const user_no = auth(user, 'user_no');
 
@@ -720,10 +720,52 @@ const controller = {
                 *
                 FROM point_accounts
                 WHERE user_no = ?
-                AND enabled = 1
+                AND enabled = 1;
             `, [ user_no ]);
 
             next({ point: result[0].point });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async applyForReturn({ user, body }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+            const return_price = param(body, 'return_price');
+
+            const [ result1 ] = await pool.query(`
+                SELECT
+                *
+                FROM point_accounts
+                WHERE user_no = ?
+                AND enabled = 1;
+            `, [ user_no ]);
+
+            if (result1[0].point < return_price) throw err(400, `환급액이 잔여 포인트를 초과했습니다.`);
+
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                const [ result ] = await pool.query(`
+                    UPDATE
+                    point_accounts
+                    SET point = point - ?
+                    WHERE user_no = ?
+                    AND enabled = 1;
+
+                    INSERT INTO return_statuses (
+                        user_no,
+                        return_price
+                    )
+                    VALUES (?, ?);
+                `, [ return_price, user_no, user_no, return_price ]);
+                next({ message: "환급신청이 완료되었습니다."});
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
         } catch (e) {
             next(e);
         }
