@@ -711,6 +711,23 @@ const controller = {
             next(e);
         }
     },
+    async getRemainingPoint({ user, query }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+
+            const [ result ] = await pool.query(`
+                SELECT
+                *
+                FROM point_accounts
+                WHERE user_no = ?
+                AND enabled = 1
+            `, [ user_no ]);
+
+            next({ point: result[0].point });
+        } catch (e) {
+            next(e);
+        }
+    }
 }
 
 module.exports = controller;
