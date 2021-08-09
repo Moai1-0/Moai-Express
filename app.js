@@ -7,6 +7,7 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const config = require('./config');
 const err = require('http-errors');
+const helmet = require('helmet');
 const { sql } = require('./middlewares/database');
 const PORT = 5000;
 const app = express();
@@ -17,6 +18,7 @@ app.use(morgan(`:date[iso][:status][:method] :url :response-time ms :res[content
 app.use(bodyParser.urlencoded({ extended: false })); // parse application/x-www-form-urlencoded
 app.use(bodyParser.json()); // parse application/json
 app.use(cookieParser());
+app.use(helmet());
 app.use(cors({ credentials: true, origin: true }));
 
 // Custom Middlewares
