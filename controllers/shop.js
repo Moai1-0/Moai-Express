@@ -562,7 +562,10 @@ const controller = {
                         else if (for_check_quantity < temp_reserved_quantity) {
                             const temp_return_quantity = temp_reserved_quantity - for_check_quantity;
                             const temp_pickup_quantity = for_check_quantity;
-                            await connection.query(`
+                            console.log(temp_return_quantity, temp_pickup_quantity);
+
+                            if (temp_pickup_quantity > 0) {
+                                await connection.query(`
                                 INSERT INTO orders (
                                     reservation_no,
                                     product_no,
@@ -577,9 +580,28 @@ const controller = {
                                 (?,?,?,?,?,?,?,"pre_pickup"),
                                 (?,?,?,?,?,?,?,"pre_return")
                             `, [
-                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
-                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
-                            ]);
+                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
+                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
+                                ]);
+                            } else if (temp_pickup_quantity == 0) {
+                                await connection.query(`
+                                INSERT INTO orders (
+                                    reservation_no,
+                                    product_no,
+                                    user_no,
+                                    shop_no,
+                                    purchase_quantity,
+                                    purchase_price,
+                                    return_price,
+                                    status
+                                )
+                                VALUES
+                                (?,?,?,?,?,?,?,"pre_return")
+                            `, [
+                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity
+                                ]);
+                            }
+
                             await connection.query(`
                                 UPDATE point_accounts SET
                                 point = point + ?
@@ -592,7 +614,7 @@ const controller = {
 
                     }
                     // 예약 총 재고 보다 총 실재고가 많은경우 
-                } else if (reserved_quantity <= actual_quantity) {
+                } else if (reserved_quantity < actual_quantity) {
                     for (let i = 0; i < result1.length; i++) {
                         let temp_reserved_quantity = result1[i].total_purchase_quantity;
                         await connection.query(`
@@ -704,6 +726,76 @@ const controller = {
             next(e);
         }
     },
+    async setReturn({ shop, body }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const product_no = param(body, "product_no");
+            const order_no = param(body, 'order_no');
+            const reservation_no = param(body, 'reservation_no');
+
+
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                await connection.query(`
+                    UPDATE orders SET
+                    status = 'return'
+                    WHERE
+                    no = ?
+                `, [order_no]);
+
+                const [result1] = await connection.query(`
+					SELECT
+					COUNT(*) AS count
+                    FROM
+                    orders
+                    WHERE
+                    reservation_no = ?
+					AND (status = 'pre_pickup' or status ="pre_return")
+                `, [reservation_no]);
+
+                if (result1[0].count <= 0) {
+                    await connection.query(`
+                        UPDATE reservations
+                        SET status = "done"
+                        WHERE
+                        no = ?
+                    `, [reservation_no]);
+
+                    const [result2] = await connection.query(`
+                        SELECT
+                        COUNT(*) AS count
+                        FROM
+                        reservations
+                        WHERE
+                        product_no = ?
+                        AND status = 'ongoing'
+                    `, [product_no]);
+
+                    if (result2[0].count <= 0) {
+                        await connection.query(`
+                            UPDATE products
+                            SET status = "done"
+                            WHERE
+                            no = ?
+                        `, [product_no]);
+                    }
+                }
+                await connection.commit();
+                next({ message: "ping" });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+
+        } catch (e) {
+            next(e);
+        }
+    },
+
+
 
     // 임시 api
     async signup({ body }, { pool }, next) {
@@ -711,6 +803,7 @@ const controller = {
             const id = param(body, "id");
             const password = param(body, 'password');
             const name = param(body, 'name');
+            const region_no = param(body, 'region_no');
             const tel = param(body, 'tel');
             const representative_name = param(body, 'representative_name');
             const zone_code = param(body, 'zone_code');
@@ -727,7 +820,7 @@ const controller = {
             const [idCheck] = await pool.query(`
                 SELECT *
                 FROM shops
-                WHERER enabled = 1
+                WHERE enabled = 1
                 AND id = ?
             `, [id]);
             if (idCheck.length > 0) throw err.BadRequest('이미 존재하는 아이디');
@@ -737,6 +830,7 @@ const controller = {
                     id,
                     password,
                     name,
+                    region_no,
                     tel,
                     representative_name,
                     zone_code,
@@ -747,11 +841,12 @@ const controller = {
                     opening_time,
                     closing_time
                     )
-                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
                 [
                     id,
                     hashedPassword,
                     name,
+                    region_no,
                     tel,
                     representative_name,
                     zone_code,
