@@ -769,7 +769,9 @@ const controller = {
                         return_price
                     )
                     VALUES (?, ?);
-                `, [return_price, user_no, user_no, return_price]);
+                `, [ return_price, user_no, user_no, return_price ]);
+                await connection.commit();
+
                 next({ message: "환급신청이 완료되었습니다." });
             } catch (e) {
                 await connection.rollback();
@@ -780,7 +782,56 @@ const controller = {
         } catch (e) {
             next(e);
         }
-    }
-};
+    },
+    async getReturnAccount({ user }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+            
+            const [ result ] = await pool.query(`
+                SELECT
+                *
+                FROM accounts
+                WHERE user_no = ?
+                AND enabled = 1
+            `, [ user_no ]);
+
+            next({ 
+                bank: result[0].bank,
+                account_number: result[0].account_number
+            });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async editReturnAccount({ user, body }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+            const bank = param(body, 'bank');
+            const account_number = param(body, 'account_number');
+
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.query(`
+                    UPDATE
+                    accounts
+                    SET bank = ?
+                    AND account_number = ?
+                    WHERE user_no = ?
+                    AND enabled = 1
+                `, [ bank, account_number, user_no ]);
+                await connection.commit();
+
+                next({ message: "환급계좌 수정이 완료되었습니다." });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+        } catch (e) {
+            next(e);
+        }
+    },
+}
 
 module.exports = controller;
