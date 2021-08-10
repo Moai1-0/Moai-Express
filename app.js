@@ -42,6 +42,7 @@ passport.deserializeUser((user, done) => { // 매개변수 user는 serializeUser
 app.use('/', require('./routes/common'));
 app.use('/shop', require('./routes/shop'));
 app.use('/user', require('./routes/user'));
+app.use('/admin', require('./routes/admin'));
 
 
 app.use((req, res, next) => {

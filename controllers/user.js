@@ -11,13 +11,13 @@ const check = require('../utils/check');
 const PAGINATION_COUNT = 10;
 
 const controller = {
-    async getProducts ({ query }, { pool }, next) {
+    async getProducts({ query }, { pool }, next) {
         try {
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
-            
-            const [ results ] = await pool.query(`
+
+            const [results] = await pool.query(`
                 SELECT
                 COUNT(*) AS total_count
                 FROM products
@@ -54,7 +54,7 @@ const controller = {
                 WHERE p.enabled = 1
                 ORDER BY p.created_datetime DESC
                 LIMIT ? OFFSET ?;
-            `, [ count, offset ]);
+            `, [count, offset]);
 
             next({
                 total_count: results[0][0].total_count,
@@ -72,7 +72,7 @@ const controller = {
     async getProduct({ query }, { pool }, next) {
         try {
             const product_no = param(query, 'product_no');
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
                 p.no AS product_no,
                 i.paths,
@@ -105,8 +105,8 @@ const controller = {
                 WHERE p.no = ?
                 AND p.enabled = 1
                 AND s.enabled = 1;
-            `, [ product_no, product_no ]);
-            
+            `, [product_no, product_no]);
+
             if (result[0].length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
 
             next({
@@ -128,7 +128,7 @@ const controller = {
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
             console.log(q);
-            const [ results ] = await pool.query(`
+            const [results] = await pool.query(`
                 SELECT
                 COUNT(*) AS total_count
                 FROM (
@@ -326,8 +326,8 @@ const controller = {
                 )  AS matched_products
                 ORDER BY created_datetime DESC
                 LIMIT ? OFFSET ?;
-            `, [ count, offset ]);
-            
+            `, [count, offset]);
+
             next({
                 total_count: results[0][0].total_count,
                 products: results[1].map((product) => ({
@@ -347,7 +347,7 @@ const controller = {
              * 임시 코드
              */
             const type = param(body, 'type', 'normal');
-            condition.contains(type, [ 'normal', 'kakao', 'naver', 'facebook', 'google', 'apple' ]);
+            condition.contains(type, ['normal', 'kakao', 'naver', 'facebook', 'google', 'apple']);
             const email = param(body, 'email');
             const password = type === 'normal' ? param(body, 'password') : null;
             const sns_id = type !== 'normal' ? param(body, 'sns_id') : null;
@@ -355,7 +355,7 @@ const controller = {
             const phone = param(body, 'phone');
             const birthday = param(body, 'birthday', birthday => parser.emptyToNull(birthday));
             const gender = param(body, 'gender', null);
-            condition.contains(gender, [ 'male', 'female', 'etc', null ]);
+            condition.contains(gender, ['male', 'female', 'etc', null]);
             const bank = param(body, 'bank'); // https://superad.tistory.com/229 (개설기관 표준코드)
             // condition check needed
             const account_number = param(body, 'account_number');
@@ -363,7 +363,7 @@ const controller = {
 
             let salt = null;
             let hashedPassword = null;
-            
+
             if (!check.phone(phone)) throw err(400, `핸드폰 번호가 올바르지 않습니다. 핸드폰 번호를 확인하세요.`);
             if (!check.email(email)) throw err(400, `이메일을 정확히 입력하세요.`);
             if (password) {
@@ -372,7 +372,7 @@ const controller = {
                 hashedPassword = hashSync(password, salt);
             }
 
-            const [ results1 ] = await pool.query(`
+            const [results1] = await pool.query(`
             SELECT
             COUNT(*) AS 'count'
             FROM users
@@ -394,7 +394,7 @@ const controller = {
             AND b.type = ?
             AND a.enabled = 1
             AND b.enabled = 1;
-            `, [ phone, email, sns_id, type ]);
+            `, [phone, email, sns_id, type]);
 
             if (results1[0][0].count > 0) throw err(400, `이미 가입된 핸드폰 번호입니다. 다른 핸드폰 번호를 입력하세요.`);
             if (results1[1][0].count > 0) throw err(400, `이미 가입된 이메일 입니다. 다른 이메일을 입력하세요.`);
@@ -405,7 +405,7 @@ const controller = {
             try {
                 await connection.beginTransaction();
                 if (type === 'normal') {
-                    const [ result ] = await connection.query(`
+                    const [result] = await connection.query(`
                         INSERT INTO users (
                             email,
                             password,
@@ -415,10 +415,10 @@ const controller = {
                             gender
                         )
                         VALUES (?, ?, ?, ?, ?, ?);
-                    `, [ email, hashedPassword, phone, name, birthday, gender ]);
+                    `, [email, hashedPassword, phone, name, birthday, gender]);
                     user_no = result.insertId;
                 } else {
-                    const [ result ] = await connection.query(`
+                    const [result] = await connection.query(`
                         INSERT INTO users (
                             email,
                             phone,
@@ -428,12 +428,12 @@ const controller = {
                         )
                         VALUES
                         (?, ?, ?, ?, ?);
-                    `, [ email, phone, name, birthday, gender ]);
+                    `, [email, phone, name, birthday, gender]);
                     await connection.query(`
                         INSERT INTO user_sns_data (user_no, type, id) 
                         VALUES
                         (?, ?, ?);
-                    `, [ result.insertId, type, sns_id ]);
+                    `, [result.insertId, type, sns_id]);
                     user_no = result.insertId;
                 }
                 await connection.query(`
@@ -444,11 +444,11 @@ const controller = {
                     )
                     VALUES
                     (?, ?, ?);
-                `, [ user_no, bank, account_number ]);
+                `, [user_no, bank, account_number]);
                 await connection.query(`
                     INSERT INTO point_accounts (user_no)
                     VALUES (?);
-                `, [ user_no ]);
+                `, [user_no]);
 
                 await connection.commit();
                 next({ message: "가입되었습니다." });
@@ -456,21 +456,22 @@ const controller = {
                 await connection.rollback();
                 next(e);
             } finally {
-                connection.release();}
+                connection.release();
+            }
         } catch (e) {
             next(e);
         }
     },
     async signin({ body }, { pool }, next) {
         try {
-            const type = param(body, 'type', 'normal')
-            condition.contains(type, [ 'normal', 'kakao', 'naver', 'facebook', 'google', 'apple' ])
-            const email = param(body, 'email', email => parser.emptyToNull(email))
-            const password = param(body, 'password', password => parser.emptyToNull(password))
-            const sns_id = type !== 'normal' ? param(body, 'sns_id') : null
+            const type = param(body, 'type', 'normal');
+            condition.contains(type, ['normal', 'kakao', 'naver', 'facebook', 'google', 'apple']);
+            const email = param(body, 'email', email => parser.emptyToNull(email));
+            const password = param(body, 'password', password => parser.emptyToNull(password));
+            const sns_id = type !== 'normal' ? param(body, 'sns_id') : null;
 
             if (type === 'normal') {
-                const [ result ] = await pool.query(`
+                const [result] = await pool.query(`
                     SELECT
                     no AS user_no,
                     email,
@@ -478,7 +479,7 @@ const controller = {
                     FROM users
                     WHERE email = ?
                     AND enabled = 1;
-                `, [ email ]);
+                `, [email]);
 
                 const isValid = compareSync(password.toString(), result[0].password);
                 if (result.length < 1 || !isValid) throw err(400, `아이디 또는 비밀번호가 일치하지 않습니다.`);
@@ -486,12 +487,12 @@ const controller = {
                 const token = encodeToken({
                     type: `user`,
                     user_no: result[0].user_no,
-                    email: result[0].email 
+                    email: result[0].email
                 }, { expiresIn: '1d' });
-                
+
                 next({ token });
             } else {
-                const [ result ] = await pool.query(`
+                const [result] = await pool.query(`
                     SELECT
                     a.no AS 'user_no',
                     a.email
@@ -502,9 +503,9 @@ const controller = {
                     AND b.type = ?
                     AND a.enabled = 1
                     AND b.enabled = 1;
-                `, [ sns_id, type ])
+                `, [sns_id, type]);
 
-                if (result.length < 1) throw err(400, `${type} 계정을 통해 가입된 이력이 없습니다.`)
+                if (result.length < 1) throw err(400, `${type} 계정을 통해 가입된 이력이 없습니다.`);
 
                 const token = encodeToken({
                     type: `user`,
@@ -529,18 +530,18 @@ const controller = {
             const depositor_name = param(body, 'depositor_name');
             const total_purchase_quantity = param(body, 'total_purchase_quantity');
             const total_purchase_price = param(body, 'total_purchase_price');
-            
+
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
 
-                const [ result ] = await connection.query(`
+                const [result] = await connection.query(`
                     SELECT
                     rest_quantity
                     FROM products
                     WHERE no = ?
                     AND enabled = 1;
-                `, [ product_no ]);
+                `, [product_no]);
 
                 if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
 
@@ -554,15 +555,15 @@ const controller = {
                         total_purchase_price
                     )
                     VALUES (?, ?, ?, ?, ?, ?);
-                `, [ user_no, shop_no, product_no, depositor_name, total_purchase_quantity, total_purchase_price ]);
-                
+                `, [user_no, shop_no, product_no, depositor_name, total_purchase_quantity, total_purchase_price]);
+
                 await connection.query(`
                     UPDATE
                     products
                     SET rest_quantity = rest_quantity - ?
                     WHERE no = ?
                     AND enabled = 1;
-                `, [ total_purchase_quantity, product_no]);
+                `, [total_purchase_quantity, product_no]);
 
                 await connection.commit();
                 next({ message: "예약되었습니다." });
@@ -573,7 +574,7 @@ const controller = {
                 connection.release();
             }
         } catch (e) {
-            next(e);            
+            next(e);
         }
     },
     async cancelReservation({ user, body }, { pool }, next) {
@@ -581,30 +582,40 @@ const controller = {
             const user_no = auth(user, 'user_no');
             const reservation_no = param(body, 'reservation_no');
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
+                product_no,
                 user_no,
-                status
+                status,
+                total_purchase_quantity
                 FROM
                 reservations
                 WHERE no = ?
                 AND enabled = 1;
-            `, [ reservation_no ]);
+            `, [reservation_no]);
 
             if (result.length < 1 || result[0].status === 'canceled') throw err(400);
             if (result[0].user_no !== user_no) throw err(401);
-            
+
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
                 await connection.query(`
                     UPDATE
                     reservations
-                    SET status = 'canceled'
+                    SET status = 'pre_canceled'
                     WHERE no = ?
                     AND enabled = 1
                 `, [reservation_no]);
-                
+
+                await connection.query(`
+                    UPDATE
+                    products
+                    SET rest_quantity = rest_quantity + ?
+                    WHERE no = ?
+                    AND enabled = 1
+                `,[result[0].total_purchase_quantity, result[0].product_no])
+
                 await connection.commit();
                 next({ message: "취소되었습니다." });
             } catch (e) {
@@ -624,7 +635,7 @@ const controller = {
              */
             const user_no = auth(user, 'user_no');
 
-            const [ results ] = await pool.query(`
+            const [results] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
                 p.no AS product_no,
@@ -647,7 +658,7 @@ const controller = {
                 WHERE r.user_no = ?
                 AND r.status = 'ongoing'
                 AND r.enabled = 1;
-            `, [ user_no ]);
+            `, [user_no]);
 
             next({
                 reservations: results.map((reservation) => ({
@@ -667,8 +678,8 @@ const controller = {
              * 페이지네이션 추가
              */
             const user_no = auth(user, 'user_no');
-            
-            const [ results ] = await pool.query(`
+
+            const [results] = await pool.query(`
                 SELECT
                 o.no AS order_no,
                 p.no AS product_no,
@@ -697,7 +708,7 @@ const controller = {
                 AND p.enabled = 1
                 AND o.enabled = 1
                 ORDER BY o.created_datetime DESC
-            `, [ user_no ]);
+            `, [user_no]);
 
             next({
                 orders: results.map((order) => ({
@@ -715,13 +726,13 @@ const controller = {
         try {
             const user_no = auth(user, 'user_no');
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
                 *
                 FROM point_accounts
                 WHERE user_no = ?
                 AND enabled = 1;
-            `, [ user_no ]);
+            `, [user_no]);
 
             next({ point: result[0].point });
         } catch (e) {
@@ -733,20 +744,20 @@ const controller = {
             const user_no = auth(user, 'user_no');
             const return_price = param(body, 'return_price');
 
-            const [ result1 ] = await pool.query(`
+            const [result1] = await pool.query(`
                 SELECT
                 *
                 FROM point_accounts
                 WHERE user_no = ?
                 AND enabled = 1;
-            `, [ user_no ]);
+            `, [user_no]);
 
             if (result1[0].point < return_price) throw err(400, `환급액이 잔여 포인트를 초과했습니다.`);
 
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
-                const [ result ] = await pool.query(`
+                const [result] = await pool.query(`
                     UPDATE
                     point_accounts
                     SET point = point - ?
@@ -758,8 +769,8 @@ const controller = {
                         return_price
                     )
                     VALUES (?, ?);
-                `, [ return_price, user_no, user_no, return_price ]);
-                next({ message: "환급신청이 완료되었습니다."});
+                `, [return_price, user_no, user_no, return_price]);
+                next({ message: "환급신청이 완료되었습니다." });
             } catch (e) {
                 await connection.rollback();
                 next(e);
@@ -770,6 +781,6 @@ const controller = {
             next(e);
         }
     }
-}
+};
 
 module.exports = controller;
