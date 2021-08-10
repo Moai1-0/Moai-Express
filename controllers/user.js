@@ -130,6 +130,9 @@ const controller = {
     async searchProducts({ query }, { pool }, next) {
         try {
             const q = param(query, 'q');
+            const region_no = param(query, 'region_no', 0); // 0:광장동
+            const sort = param(query, 'sort', 'descending');
+            condition.contains(sort, ['descending', 'impending', 'discount_rate']);
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
@@ -179,7 +182,8 @@ const controller = {
                             no,
                             name
                             FROM shops
-                            WHERE enabled = 1
+                            WHERE region_no = ${pool.escape(region_no)}
+                            AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
                     ) AS by_product_name
@@ -225,6 +229,7 @@ const controller = {
                             FROM shops
                             WHERE MATCH(name)
                             AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AND region_no = ${pool.escape(region_no)}
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
@@ -286,7 +291,8 @@ const controller = {
                             no,
                             name
                             FROM shops
-                            WHERE enabled = 1
+                            WHERE region_no = ${pool.escape(region_no)}
+                            AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
                     ) AS by_product_name
@@ -298,6 +304,7 @@ const controller = {
                         p.rest_quantity,
                         p.regular_price,
                         p.discounted_price,
+                        p.discount_rate,
                         p.expiry_datetime,
                         p.created_datetime,
                         i.path,
@@ -311,6 +318,7 @@ const controller = {
                             rest_quantity,
                             regular_price,
                             discounted_price,
+                            discount_rate,
                             expiry_datetime,
                             created_datetime
                             FROM products
@@ -332,12 +340,13 @@ const controller = {
                             FROM shops
                             WHERE MATCH(name)
                             AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
+                            AND region_no = ${pool.escape(region_no)}
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
                     ) AS by_shop_name
                 )  AS matched_products
-                ORDER BY created_datetime DESC
+                ORDER BY ${sort === 'descending' ? 'created_datetime DESC': sort === 'impending' ? 'expiry_datetime ASC' : 'discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
 
