@@ -3,14 +3,6 @@ const { encodeToken, decodeToken, getToken } = require('../utils/token');
 const { auth, } = require('../utils/params');
 
 module.exports = {
-    async checkSomething(req, res, next) {
-        const { something } = req;
-        try {
-            next();
-        } catch (e) {
-            next(e);
-        }
-    },
     async checkShop(req, { pool }, next) {
         try {
             const authorization = req.headers.authorization;
@@ -50,5 +42,25 @@ module.exports = {
         } catch (e) {
             next(e);
         }
-    }
+    },
+    async checkAdmin(req, { body }, next) {
+        try {
+            const authorization = req.headers.authorization;
+            if (authorization === undefined || authorization === null) throw err.Unauthorized("authorization 비어있음");
+            const decoded = decodeToken(getToken(authorization));
+            if (decoded == null) throw err.Unauthorized('토큰 만료');
+            const [ result ] = await pool.query(`
+                SELECT *
+                FROM admins
+                WHERE no = ?
+                AND enabled = 1
+            `, [decoded.admin_no]);
+
+            if (result.length < 1) throw err.Unauthorized('디비에 user없음');
+            req.admin = { admin_no: decoded.admin_no };
+            next();
+        } catch (e) {
+            next(e);
+        }        
+    } 
 };
