@@ -8,7 +8,7 @@ const { S3 } = require('../utils/multer');
 const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
 
-controller = {
+const controller = {
     async setReturn({ shop, body }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
