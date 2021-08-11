@@ -232,6 +232,7 @@ const controller = {
                 WHERE
                 a.shop_no = ?
                 AND a.product_no = ?
+                AND a.status = "agreed"
                 AND a.enabled = 1
                 ORDER BY a.created_datetime ASC;
 
@@ -332,6 +333,7 @@ const controller = {
                 ON a.user_no = c.no 
                 WHERE
                 a.shop_no = ?
+                AND a.status = "wait"
                 AND a.product_no = ?
                 AND a.enabled = 1
                 ORDER BY a.created_datetime ASC;
@@ -612,6 +614,14 @@ const controller = {
 
                         }
                         for_check_quantity -= temp_reserved_quantity;
+                        await connection.query(`
+                            UPDATE
+                            reservations
+                            SET status = "wait"
+                            WHERE
+                            no = ?
+                            AND enabled = 1
+                        `, [result[i].reservation_no]);
 
                     }
                     // 예약 총 재고 보다 총 실재고가 많은경우 
@@ -636,8 +646,17 @@ const controller = {
                         ]);
 
                         for_check_quantity -= temp_reserved_quantity;
+                        await connection.query(`
+                            UPDATE
+                            reservations
+                            SET status = "wait"
+                            WHERE
+                            no = ?
+                            AND enabled = 1
+                        `, [result[i].reservation_no]);
                     }
                 }
+
                 await connection.commit();
                 next({ message: "ping" });
             } catch (e) {
