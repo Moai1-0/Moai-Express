@@ -11,6 +11,26 @@ const check = require('../utils/check');
 const PAGINATION_COUNT = 10;
 
 const controller = {
+    async controllerFormat({ user, body, query }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                await connection.query(``);
+                await connection.commit();
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+            next({ message: "ping" });
+        } catch (e) {
+            next(e);
+        }
+    },
     async getProducts({ query }, { pool }, next) {
         try {
             const region_no = param(query, 'region_no', 0); // 0:광장동
@@ -849,6 +869,183 @@ const controller = {
             } finally {
                 connection.release();
             }
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getReservationStatus({ user, query }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+            const page = Number(param(query, 'page', 0));
+            const count = Number(param(query, 'count', PAGINATION_COUNT));
+            const offset = count * page;
+
+            const [ results ] = await pool.query(`
+                SELECT
+                COUNT(*) AS total_count
+                FROM reservations
+                WHERE user_no = ?
+                AND (status = 'ongoing' OR status = 'agreed' OR status = 'pre_canceled')
+                AND enabled = 1;
+
+                SELECT
+                r.no AS reservation_no,
+                p.no AS product_no,
+                p.name AS product_name,
+                total_purchase_quantity,
+                total_purchase_price,
+                s.no AS shop_no,
+                s.name AS shop_name,
+                i.path
+                FROM (
+                    SELECT
+                    no,
+                    product_no,
+                    status,
+                    total_purchase_quantity,
+                    total_purchase_price
+                    FROM reservations 
+                    WHERE user_no = ?
+                    AND (status = 'ongoing' OR status = 'agreed' OR status = 'pre_canceled')
+                    AND enabled = 1
+                ) AS r
+                JOIN (
+                    SELECT
+                    no,
+                    name,
+                    shop_no,
+                    discounted_price,
+                    return_price
+                    FROM products
+                ) as p
+                ON r.product_no = p.no
+                LEFT JOIN (
+                    SELECT
+                    product_no,
+                    path
+                    FROM product_images
+                    WHERE enabled = 1
+                    AND sort = 1
+                ) AS i
+                ON p.no = i.product_no
+                JOIN (
+                    SELECT
+                    no,
+                    name
+                    FROM shops
+                    WHERE enabled = 1
+                ) AS s
+                on p.shop_no = s.no
+                LIMIT ? OFFSET ?;
+                `, [ user_no, user_no, count, offset ]);
+            
+            next({ 
+                total_count: results[0][0].total_count,
+                products: results[1]
+            });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getReservationStatusDetail({ user, query }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+            const reservation_no = param(query, 'reservation_no');
+
+            const [ result ] = await pool.query(`
+                SELECT
+                r.no AS reservation_no,
+                p.no AS product_no,
+                p.name AS product_name,
+                total_purchase_quantity,
+                total_purchase_price,
+                s.no AS shop_no,
+                s.name AS shop_name,
+                s.tel,
+                s.road_address,
+                s.road_detail_address,
+                s.region_address,
+                s.region_detail_address,
+                s.latitude,
+                s.longitude,
+                s.shop_image,
+                s.opening_time,
+                s.closing_time,             
+                i.path
+                FROM (
+                    SELECT
+                    no,
+                    product_no,
+                    status,
+                    total_purchase_quantity,
+                    total_purchase_price
+                    FROM reservations 
+                    WHERE no = ?
+                    AND user_no = ?
+                    AND enabled = 1
+                ) AS r
+                JOIN (
+                    SELECT
+                    no,
+                    name,
+                    shop_no,
+                    discounted_price,
+                    return_price
+                    FROM products
+                ) as p
+                ON r.product_no = p.no
+                LEFT JOIN (
+                    SELECT
+                    product_no,
+                    path
+                    FROM product_images
+                    WHERE enabled = 1
+                    AND sort = 1
+                ) AS i
+                ON p.no = i.product_no
+                JOIN (
+                    SELECT
+                    no,
+                    name,
+                    tel,
+                    road_address,
+                    road_detail_address,
+                    region_address,
+                    region_detail_address,
+                    latitude,
+                    longitude,
+                    shop_image,
+                    opening_time,
+                    closing_time
+                    FROM shops
+                    WHERE enabled = 1
+                ) AS s
+                on p.shop_no = s.no
+            `, [ reservation_no, user_no ]);
+
+            next({ 
+                reservation: result[0]
+             });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getOrderHistory({ user, body, query }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                await connection.query(``);
+                await connection.commit();
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+            next({ message: "ping" });
         } catch (e) {
             next(e);
         }
