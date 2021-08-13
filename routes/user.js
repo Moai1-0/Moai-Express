@@ -12,10 +12,10 @@ router.post('/reserve', checkUser, user.reserveProduct); // 상품 예약
 router.patch('/reserve', checkUser, user.cancelReservation); // 상품 예약 취소
 router.get('/history/ongoing', checkUser, user.getReservationHistory); // 구매내역 - 진행중
 router.get('/history/done', checkUser, user.getPurchaseHistory); // 구매내역 - 수령/환급
-router.get('/status/reservation', checkUser, user.getReservationStatus) // 주문현황 - 예약현황 리스트
-router.get('/status/reservation/detail', checkUser, user.getReservationStatusDetail) // 주문현황 - 예약현황 디테일
-router.get('/status/order')
-router.get('/status/order/detail')
+router.get('/status/reservation', checkUser, user.getReservationStatus); // 주문현황 - 예약현황 리스트
+router.get('/status/reservation/detail', checkUser, user.getReservationStatusDetail); // 주문현황 - 예약현황 디테일
+router.get('/status/order', checkUser, user.getOrderStatus); // 주문현황 - 수령/환급현황 리스트
+router.get('/status/order/detail', checkUser, user.getOrderStatusDetail); // 주문현황 - 수령/환급현황 디테일
 
 router.get('/point', checkUser, user.getRemainingPoint); // 잔여 포인트 조회
 router.post('/return', checkUser, user.applyForReturn); // 환급 신청
