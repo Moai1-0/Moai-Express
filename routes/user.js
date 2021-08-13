@@ -10,8 +10,6 @@ router.post('/signup', user.signup); // 회원가입
 router.post('/signin', user.signin); // 로그인
 router.post('/reserve', checkUser, user.reserveProduct); // 상품 예약
 router.patch('/reserve', checkUser, user.cancelReservation); // 상품 예약 취소
-router.get('/history/ongoing', checkUser, user.getReservationHistory); // 구매내역 - 진행중
-router.get('/history/done', checkUser, user.getPurchaseHistory); // 구매내역 - 수령/환급
 router.get('/status/reservation', checkUser, user.getReservationStatus); // 주문현황 - 예약현황 리스트
 router.get('/status/reservation/detail', checkUser, user.getReservationStatusDetail); // 주문현황 - 예약현황 디테일
 router.get('/status/order', checkUser, user.getOrderStatus); // 주문현황 - 수령/환급현황 리스트
