@@ -58,6 +58,8 @@ const controller = {
                 s.name AS shop_name,
                 i.path
                 FROM products AS p
+                JOIN shops AS s
+                ON p.shop_no = s.no
                 LEFT JOIN (
                     SELECT
                     product_no,
@@ -67,16 +69,9 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                JOIN (
-                    SELECT
-                    no,
-                    name
-                    FROM shops
-                    WHERE region_no = ?
-                    AND enabled = 1
-                ) AS s
-                ON p.shop_no = s.no
-                WHERE p.enabled = 1
+                WHERE s.region_no = ?
+                AND s.enabled = 1
+                AND p.enabled = 1
                 ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC': sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [region_no, count, offset]);
@@ -115,6 +110,8 @@ const controller = {
                 p.expiry_datetime,
                 p.pickup_datetime
                 FROM products AS p
+                JOIN shops AS s
+                ON p.shop_no = s.no
                 LEFT JOIN (
                     SELECT
                     product_no,
@@ -125,9 +122,7 @@ const controller = {
                     GROUP BY product_no
                     ORDER BY sort ASC
                 ) AS i
-                ON p.no = i.product_no
-                JOIN shops AS s
-                ON p.shop_no = s.no
+                ON p.no = i.product_no                
                 WHERE p.no = ?
                 AND p.enabled = 1
                 AND s.enabled = 1;
@@ -188,15 +183,6 @@ const controller = {
                             AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
                             AND enabled = 1
                         ) AS p
-                        LEFT JOIN (
-                            SELECT
-                            product_no,
-                            path
-                            FROM product_images
-                            WHERE enabled = 1
-                            AND sort = 1
-                        ) AS i
-                        ON p.no = i.product_no
                         JOIN (
                             SELECT
                             no,
@@ -206,6 +192,15 @@ const controller = {
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no
                     ) AS by_product_name
                     UNION
                     SELECT * FROM (
@@ -233,15 +228,6 @@ const controller = {
                             FROM products
                             WHERE enabled = 1
                         ) AS p
-                        LEFT JOIN (
-                            SELECT
-                            product_no,
-                            path
-                            FROM product_images
-                            WHERE enabled = 1
-                            AND sort = 1
-                        ) AS i
-                        ON p.no = i.product_no
                         JOIN (
                             SELECT
                             no,
@@ -253,6 +239,15 @@ const controller = {
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no                        
                     ) AS by_shop_name
                 ) AS matched_products;
 
@@ -297,15 +292,6 @@ const controller = {
                             AGAINST(${pool.escape(q)} IN BOOLEAN MODE)
                             AND enabled = 1
                         ) AS p
-                        LEFT JOIN (
-                            SELECT
-                            product_no,
-                            path
-                            FROM product_images
-                            WHERE enabled = 1
-                            AND sort = 1
-                        ) AS i
-                        ON p.no = i.product_no
                         JOIN (
                             SELECT
                             no,
@@ -315,6 +301,15 @@ const controller = {
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no
                     ) AS by_product_name
                     UNION
                     SELECT * FROM (
@@ -344,15 +339,6 @@ const controller = {
                             FROM products
                             WHERE enabled = 1
                         ) AS p
-                        LEFT JOIN (
-                            SELECT
-                            product_no,
-                            path
-                            FROM product_images
-                            WHERE enabled = 1
-                            AND sort = 1
-                        ) AS i
-                        ON p.no = i.product_no
                         JOIN (
                             SELECT
                             no,
@@ -364,6 +350,15 @@ const controller = {
                             AND enabled = 1
                         ) AS s
                         ON p.shop_no = s.no
+                        LEFT JOIN (
+                            SELECT
+                            product_no,
+                            path
+                            FROM product_images
+                            WHERE enabled = 1
+                            AND sort = 1
+                        ) AS i
+                        ON p.no = i.product_no
                     ) AS by_shop_name
                 )  AS matched_products
                 ORDER BY ${sort === 'descending' ? 'created_datetime DESC': sort === 'impending' ? 'expiry_datetime ASC' : 'discount_rate DESC'}
@@ -374,6 +369,7 @@ const controller = {
                 total_count: results[0][0].total_count,
                 products: results[1].map((product) => ({
                     ...product,
+                    discount_rate: parseFloat(product.discount_rate),
                     expiry_datetime: dayjs(product.expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
                     impending: dayjs(product.expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
                 }))
@@ -1099,6 +1095,14 @@ const controller = {
                     FROM products
                 ) as p
                 ON r.product_no = p.no
+                JOIN (
+                    SELECT
+                    no,
+                    name
+                    FROM shops
+                    WHERE enabled = 1
+                ) AS s
+                ON p.shop_no = s.no
                 LEFT JOIN (
                     SELECT
                     product_no,
@@ -1108,14 +1112,6 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                JOIN (
-                    SELECT
-                    no,
-                    name
-                    FROM shops
-                    WHERE enabled = 1
-                ) AS s
-                ON p.shop_no = s.no
                 LEFT JOIN (
                     SELECT
                     no,
