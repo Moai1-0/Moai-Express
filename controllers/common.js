@@ -33,6 +33,7 @@ const controller = {
                     }
                 }
             } = profile;
+            console.log(profile);
             console.log(provider, id, username, nickname, email);
 
             const [result] = await pool.query(`
@@ -50,13 +51,13 @@ const controller = {
                             name,
                             phone
                         )
-                    `)
+                    `);
                     await connection.query(`
                         INSERT INTO user_sns_data(
                             id,
 
                         )
-                    `)
+                    `);
                     await connection.commit();
                     next({ message: "ping" });
                 } catch (e) {
@@ -68,9 +69,9 @@ const controller = {
             }
             next({ message: 'test' });
         } catch (e) {
-            next(e)
+            next(e);
         }
-        
+
     }
 };
 

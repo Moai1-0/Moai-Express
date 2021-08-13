@@ -28,6 +28,11 @@ const controller = {
             const return_price = param(body, "return_price");
             const expiry_datetime = param(body, "expiry_datetime");
             const pickup_datetime = param(body, "pickup_datetime");
+            const discount_rate = parseFloat(discounted_price / regular_price * 100).toFixed(2);
+            const is_bookmark = param(body, "is_bookmark");
+
+
+
 
             const connection = await pool.getConnection(async conn => await conn);
 
@@ -44,9 +49,10 @@ const controller = {
                     discounted_price,
                     return_price,
                     expiry_datetime,
-                    pickup_datetime
+                    pickup_datetime,
+                    discount_rate
                     )
-                VALUES (?,?,?,?,?,?,?,?,?,?)`,
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
                     [
                         shop_no,
                         name,
@@ -57,7 +63,8 @@ const controller = {
                         discounted_price,
                         return_price,
                         expiry_datetime,
-                        pickup_datetime
+                        pickup_datetime,
+                        discount_rate
                     ]);
                 files.map(async (file, index) => {
                     const { instance, params } = S3;
@@ -76,7 +83,20 @@ const controller = {
                         )
                         VALUES(?,?,?)
                     `, [result.insertId, name, `/${file_name}`]);
+
                 });
+
+                if (is_bookmark) {
+                    await connection.query(`
+                        INSERT INTO product_bookmark(
+                            shop_no,
+                            product_no
+                        )
+                        VALUES(?,?)
+
+
+                    `, [shop_no, result.insertId]);
+                }
                 await connection.commit();
                 next({ message: "ping" });
             } catch (e) {
