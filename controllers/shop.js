@@ -110,7 +110,7 @@ const controller = {
             next(e);
         }
     },
-    async getBookmarkProducts({ shop, body, query }, { pool }, next) {
+    async getBookmarkProducts({ shop }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
 
@@ -263,6 +263,7 @@ const controller = {
                 a.rest_quantity,
                 a.regular_price,
                 a.discounted_price,
+                a.discounted_rate,
                 a.pickup_datetime,
                 a.expiry_datetime,
                 b.sort,
@@ -279,7 +280,7 @@ const controller = {
 
             if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
             next({
-                reservations: {
+                product: {
                     ...result[1][0],
                     pickup_datetime: dayjs(result[1][0].pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
                     expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
@@ -291,6 +292,7 @@ const controller = {
             next(e);
         }
     },
+    //수정 필요
     async getBidProducts({ shop }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
@@ -508,15 +510,13 @@ const controller = {
                 no = ?
             `, [product_no]);
 
-            if (result[0].expected_quantity < actual_quantity) throw err.BadRequest("예상 재고수 보다 많이 입력");
+            if (result[0].expected_quantity < actual_quantity
+                // || result[0].actual_quantity != null
+            ) throw err.BadRequest("예상 재고수 보다 많이 입력");
 
-            await pool.query(`
-                UPDATE products SET
-                actual_quantity = ?
-                WHERE no = ?
-            `, [actual_quantity, product_no]);
 
-            const reserved_quantity = result[0].expected_quantity - result[0].rest_quantity;
+
+
             // actual >= reserved_quantity(예약 완료된 재고) -> 그냥 모두 픽업처리
             // actual < reserved_quantity -> 선착순으로 픽업 나머지 환급
 
@@ -553,9 +553,19 @@ const controller = {
                 `, [product_no]);
             // 실재고보다 예약한 재고가 더 많은 경우
             let for_check_quantity = actual_quantity;
+            const reserved_quantity = result[0].expected_quantity - result[0].rest_quantity;
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
+                await pool.query(`
+                UPDATE products SET
+                actual_quantity = ?
+                WHERE no = ?
+            `, [actual_quantity, product_no]);
+
+
+                // 예약 총 재고 보다 총 실재고가 많은경우;
+
                 if (reserved_quantity > actual_quantity) {
 
                     for (let i = 0; i < result1.length; i++) {
@@ -641,7 +651,7 @@ const controller = {
                             WHERE
                             no = ?
                             AND enabled = 1
-                        `, [result[i].reservation_no]);
+                        `, [result1[i].reservation_no]);
 
                     }
                     // 예약 총 재고 보다 총 실재고가 많은경우 
@@ -673,7 +683,7 @@ const controller = {
                             WHERE
                             no = ?
                             AND enabled = 1
-                        `, [result[i].reservation_no]);
+                        `, [result1[i].reservation_no]);
                     }
                 }
 
