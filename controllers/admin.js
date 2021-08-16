@@ -51,7 +51,7 @@ const controller = {
                     )
                     VALUES (?, ?, ?, ?, ?);
                 `, [email, hashedPassword, name, phone, auth]);
-                
+
                 await connection.commit();
                 next({ message: "가입되었습니다." });
             } catch (e) {
@@ -59,7 +59,7 @@ const controller = {
                 next(e);
             } finally {
                 connection.release();
-            }   
+            }
         } catch (e) {
             next(e);
         }
@@ -69,20 +69,20 @@ const controller = {
             const email = param(body, 'email');
             const password = param(body, 'password');
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
                 *
                 FROM admins
                 WHERE email = ?;
-            `, [ email ]);
+            `, [email]);
 
             const accountValid = compareSync(password.toString(), result[0].password);
             if (result.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
 
-            const token = encodeToken({ 
-                type: `admin`, 
-                shop_no: result[0].no, 
-                email: result[0].email 
+            const token = encodeToken({
+                type: `admin`,
+                shop_no: result[0].no,
+                email: result[0].email
             }, { expiresIn: '7d' });
 
             next({ token });
@@ -90,9 +90,9 @@ const controller = {
             next(e);
         }
     },
-    async setReturn({ shop, body }, { pool }, next) {
+    async setReturn({ admin, body }, { pool }, next) {
         try {
-            const shop_no = auth(shop, "shop_no");
+            const admin_no = auth(admin, "admin_no");
             const product_no = param(body, "product_no");
             const order_no = param(body, 'order_no');
             const reservation_no = param(body, 'reservation_no');
@@ -133,7 +133,7 @@ const controller = {
                         reservations
                         WHERE
                         product_no = ?
-                        AND status = 'agreed'
+                        AND status = 'wait'
                     `, [product_no]);
 
                     if (result2[0].count <= 0) {
@@ -186,6 +186,32 @@ const controller = {
             next(e);
         }
     },
+    async setAgreed({ admin, body, query }, { pool }, next) {
+        try {
+            const admin_no = auth(admin, "admin_no");
+            const reservation_no = param(body, "reservation_no");
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                await connection.query(`
+                    UPDATE
+                    reservations
+                    SET status = 'agreed'
+                    WHERE no = ?
+                `, [reservation_no]);
+                await connection.commit();
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+            next({ message: "ping" });
+        } catch (e) {
+            next(e);
+        }
+    },
+
 };
 
 module.exports = controller;

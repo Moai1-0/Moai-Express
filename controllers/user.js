@@ -57,7 +57,7 @@ const controller = {
                 ) AS s
                 ON p.shop_no = s.no
                 WHERE p.enabled = 1
-                ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC': sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
+                ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC' : sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [region_no, count, offset]);
 
@@ -118,7 +118,7 @@ const controller = {
             next({
                 ...result[0],
                 discount_rate: parseFloat(result[0].discount_rate),
-                paths: result[0].paths?.split(',') || [],
+                paths: result[0].paths.split(',') || [],
                 expiry_datetime: dayjs(result[0].expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
                 pickup_datetime: dayjs(result[0].pickup_datetime).format(`M월 D일(ddd) a h시 m분`),
                 impending: dayjs(result[0].expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
@@ -346,7 +346,7 @@ const controller = {
                         ON p.shop_no = s.no
                     ) AS by_shop_name
                 )  AS matched_products
-                ORDER BY ${sort === 'descending' ? 'created_datetime DESC': sort === 'impending' ? 'expiry_datetime ASC' : 'discount_rate DESC'}
+                ORDER BY ${sort === 'descending' ? 'created_datetime DESC' : sort === 'impending' ? 'expiry_datetime ASC' : 'discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
 
@@ -635,7 +635,7 @@ const controller = {
                     SET rest_quantity = rest_quantity + ?
                     WHERE no = ?
                     AND enabled = 1
-                `,[result[0].total_purchase_quantity, result[0].product_no])
+                `, [result[0].total_purchase_quantity, result[0].product_no]);
 
                 await connection.commit();
                 next({ message: "취소되었습니다." });
@@ -790,7 +790,7 @@ const controller = {
                         return_price
                     )
                     VALUES (?, ?);
-                `, [ return_price, user_no, user_no, return_price ]);
+                `, [return_price, user_no, user_no, return_price]);
                 await connection.commit();
 
                 next({ message: "환급신청이 완료되었습니다." });
@@ -807,16 +807,16 @@ const controller = {
     async getReturnAccount({ user }, { pool }, next) {
         try {
             const user_no = auth(user, 'user_no');
-            
-            const [ result ] = await pool.query(`
+
+            const [result] = await pool.query(`
                 SELECT
                 *
                 FROM accounts
                 WHERE user_no = ?
                 AND enabled = 1
-            `, [ user_no ]);
+            `, [user_no]);
 
-            next({ 
+            next({
                 bank: result[0].bank,
                 account_number: result[0].account_number
             });
@@ -839,7 +839,7 @@ const controller = {
                     AND account_number = ?
                     WHERE user_no = ?
                     AND enabled = 1
-                `, [ bank, account_number, user_no ]);
+                `, [bank, account_number, user_no]);
                 await connection.commit();
 
                 next({ message: "환급계좌 수정이 완료되었습니다." });
@@ -853,6 +853,6 @@ const controller = {
             next(e);
         }
     },
-}
+};
 
 module.exports = controller;
