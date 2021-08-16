@@ -75,7 +75,7 @@ const controller = {
                     instance.upload(params, (error, data) => {
                         if (error) throw err.InternalServerError('S3 에러');
                     });
-                    const [result2] = await pool.query(`
+                    const [result2] = await connection.query(`
                         INSERT INTO product_images (
                             product_no,
                             name,
@@ -292,40 +292,49 @@ const controller = {
             next(e);
         }
     },
-    //수정 필요
     async getBidProducts({ shop }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
 
-            const [result] = await pool.query(`
-                    SELECT
-                    a.no,
-                    a.name,
-                    a.expected_quantity,
-                    a.actual_quantity,
-                    a.rest_quantity,
-                    a.regular_price,
-                    a.discounted_price,
-                    a.pickup_datetime,
-                    a.expiry_datetime,
-                    b.sort,
-                    GROUP_CONCAT(path) AS "product_images"
-                    FROM products AS a
-                    INNER JOIN product_images AS b
-                    ON a.no = b.product_no
-                    WHERE
-                    a.shop_no = ?
-                    AND a.expiry_datetime < NOW()
-                    AND a.status = 'ongoing'
-                    AND a.enabled = 1
-                    GROUP BY b.product_no
+            const [result] = await pool.query(`       
+                SELECT
+                a.no,
+                a.name,
+                a.expected_quantity,
+                a.actual_quantity,
+                a.rest_quantity,
+                a.regular_price,
+                a.discounted_price,
+                a.pickup_datetime,
+                a.expiry_datetime,
+                b.sort,
+                c.pre_pickup_count,
+                GROUP_CONCAT(path) AS "product_images"
+                FROM products AS a
+                
+                LEFT JOIN (SELECT 
+                            product_no,
+                            COUNT(*) as pre_pickup_count
+                            FROM orders
+                            WHERE status = 'pre_pickup'
+                            GROUP BY product_no) AS c
+                ON c.product_no = a.no
+                LEFT JOIN product_images AS b
+                ON a.no = b.product_no
+                WHERE
+                a.shop_no = ?
+                AND a.expiry_datetime < NOW()
+                AND a.status = 'ongoing'
+                AND a.enabled = 1
+                GROUP BY a.no
+
                     `, [shop_no]);
 
             next(result.map(item => ({
                 ...item,
                 pickup_datetime: dayjs(item.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
                 expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
-                product_images: item.product_images.split(',').map(item => S3_URL + item)
+                product_images: (item.product_images) ? item.product_images.split(',').map(item => S3_URL + item) : []
             })));
         } catch (e) {
             next(e);
@@ -344,15 +353,53 @@ const controller = {
                 a.depositor_name,
                 a.total_purchase_quantity,
                 a.total_purchase_price,
+                a.status,
                 b.name AS "product_name",
                 c.name AS "user_name",
                 c.phone,
-                a.created_datetime
-                FROM reservations AS a
+                a.created_datetime,
+                d.purchase_quantity AS pre_pickup_quantity,
+                e.purchase_quantity AS pickup_quantity,
+                f.purchase_quantity AS pre_return_quantity,
+                g.purchase_quantity AS return_quantity
+                FROM 
+                reservations AS a
                 INNER JOIN products AS b
                 ON a.product_no = b.no
                 INNER JOIN users AS c
                 ON a.user_no = c.no 
+                LEFT JOIN 
+                (SELECT 
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'pre_pickup') AS d
+                ON a.no = d.reservation_no
+                LEFT JOIN 
+                (SELECT 
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'pickup') AS e
+                ON a.no = e.reservation_no
+                LEFT JOIN 
+                (SELECT 
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'pre_return') AS f
+                ON a.no = f.reservation_no
+                LEFT JOIN 
+                (SELECT 
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'return') AS g
+                ON a.no = g.reservation_no
                 WHERE
                 a.shop_no = ?
                 AND a.status = "wait"
@@ -388,7 +435,7 @@ const controller = {
                     expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
                     product_images: result[1][0].product_images.split(',').map(item => S3_URL + item)
                 },
-                orders: result[0]
+                reservations: result[0]
             });
         } catch (e) {
             next(e);
