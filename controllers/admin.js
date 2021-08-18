@@ -2,6 +2,7 @@ const err = require('http-errors');
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
+const { Users } = require('../models');
 
 const controller = {
     async controllerFormat({ admin, body, query }, { pool }, next) {
@@ -182,6 +183,18 @@ const controller = {
                 connection.release();
             }
 
+        } catch (e) {
+            next(e);
+        }
+    }, async getUsers({ admin, body, query }, { pool }, next) {
+        try {
+            // const admin_no = auth(admin, "admin_no");
+            const users = await Users.findAll({
+                where: {
+                    enabled: 1
+                }
+            });
+            next({ users });
         } catch (e) {
             next(e);
         }
