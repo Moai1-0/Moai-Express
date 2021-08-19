@@ -37,7 +37,8 @@
     "passport-jwt": "^4.0.0",
     "passport-kakao": "^1.0.1",
     "passport-local": "^1.0.0",
-    "querystring": "^0.2.0"
+    "querystring": "^0.2.0",
+    "sequelize": "^6.6.5"
   },
   "devDependencies": {
     "jest": "^27.0.6",
