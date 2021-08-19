@@ -2,7 +2,11 @@ const err = require('http-errors');
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
-const { Users } = require('../models');
+const { Users, sequelize } = require('../models');
+const dayjs = require('dayjs');
+
+
+const PAGINATION_COUNT = 10;
 
 const controller = {
     async controllerFormat({ admin, body, query }, { pool }, next) {
@@ -186,15 +190,66 @@ const controller = {
         } catch (e) {
             next(e);
         }
-    }, async getUsers({ admin, body, query }, { pool }, next) {
+    }, async getUsers({ admin, query }, { pool }, next) {
         try {
             // const admin_no = auth(admin, "admin_no");
-            const users = await Users.findAll({
+            const page = Number(param(query, 'page', 0));
+            const count = Number(param(query, 'count', PAGINATION_COUNT));
+            const offset = count * page;
+            
+            const users = await Users.findAndCountAll({
                 where: {
                     enabled: 1
-                }
+                },
+                attributes: [
+                    ['no', 'user_no'],
+                    'email',
+                    'name',
+                    'phone',
+                    'gender',
+                    'birthday',
+                    'created_datetime'
+                ],
+                limit: count,
+                offset,
+                raw: true
             });
-            next({ users });
+
+            next({ 
+                total_count: users.count,
+                users: users.rows.map((user) => ({
+                    ...user,
+                    created_datetime: dayjs(user.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+                })) 
+            });
+        } catch (e) {
+            next(e);
+        }
+    }, async getUser({ admin, query }, { pool }, next) {
+        try {
+            // const admin_no = auth(admin, "admin_no");
+            const user_no = param(query, 'user_no');
+            
+            const user = await Users.findOne({
+                where: {
+                    enabled: 1
+                },
+                attributes: [
+                    ['no', 'user_no'],
+                    'email',
+                    'name',
+                    'phone',
+                    'gender',
+                    'birthday',
+                    'created_datetime'
+                ],
+                raw: true
+            });
+
+            next({ 
+                ...user,
+                created_datetime: dayjs(user.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+            });
         } catch (e) {
             next(e);
         }
