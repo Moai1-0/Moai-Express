@@ -2,6 +2,7 @@
 config.json
 
 package-lock.json
+.DS_STORE
 
 # Logs
 logs

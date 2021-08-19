@@ -2,6 +2,11 @@ const err = require('http-errors');
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
+const { Users, Shops, sequelize } = require('../models');
+const dayjs = require('dayjs');
+
+
+const PAGINATION_COUNT = 10;
 
 const controller = {
     async controllerFormat({ admin, body, query }, { pool }, next) {
@@ -182,6 +187,152 @@ const controller = {
                 connection.release();
             }
 
+        } catch (e) {
+            next(e);
+        }
+    }, async getUsers({ admin, query }, { pool }, next) {
+        try {
+            // const admin_no = auth(admin, "admin_no");
+            const page = Number(param(query, 'page', 0));
+            const count = Number(param(query, 'count', PAGINATION_COUNT));
+            const offset = count * page;
+            
+            const users = await Users.findAndCountAll({
+                where: {
+                    enabled: 1
+                },
+                attributes: [
+                    ['no', 'user_no'],
+                    'email',
+                    'name',
+                    'phone',
+                    'gender',
+                    'birthday',
+                    'created_datetime'
+                ],
+                limit: count,
+                offset,
+                raw: true
+            });
+
+            next({ 
+                total_count: users.count,
+                users: users.rows.map((user) => ({
+                    ...user,
+                    created_datetime: dayjs(user.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+                })) 
+            });
+        } catch (e) {
+            next(e);
+        }
+    }, async getUser({ admin, query }, { pool }, next) {
+        try {
+            // const admin_no = auth(admin, "admin_no");
+            const user_no = param(query, 'user_no');
+            
+            const user = await Users.findOne({
+                where: {
+                    enabled: 1
+                },
+                attributes: [
+                    ['no', 'user_no'],
+                    'email',
+                    'name',
+                    'phone',
+                    'gender',
+                    'birthday',
+                    'created_datetime'
+                ],
+                raw: true
+            });
+
+            next({ 
+                ...user,
+                created_datetime: dayjs(user.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+            });
+        } catch (e) {
+            next(e);
+        }
+    }, async getShops({ admin, query }, { pool }, next) {
+        try {
+            // const admin_no = auth(admin, "admin_no");
+            const page = Number(param(query, 'page', 0));
+            const count = Number(param(query, 'count', PAGINATION_COUNT));
+            const offset = count * page;
+            
+            const shops = await Shops.findAndCountAll({
+                where: {
+                    enabled: 1
+                },
+                attributes: [
+                    ['no', 'shop_no'],
+                    'region_no',
+                    'id',
+                    'name',
+                    'tel',
+                    'shop_image',
+                    'representative_name',
+                    'zone_code',
+                    'road_address',
+                    'road_detail_address',
+                    'region_address',  
+                    'region_detail_address',
+                    'latitude',
+                    'longitude',  
+                    'opening_time',
+                    'closing_time',
+                    'created_datetime',
+                ],
+                limit: count,
+                offset,
+                raw: true
+            });
+
+            next({ 
+                total_count: shops.count,
+                shops: shops.rows.map((shop) => ({
+                    ...shop,
+                    created_datetime: dayjs(shop.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+                })) 
+            });
+        } catch (e) {
+            next(e);
+        }
+    }, async getShop({ admin, query }, { pool }, next) {
+        try {
+            // const admin_no = auth(admin, "admin_no");
+            const shop_no = param(query, 'shop_no');
+            
+            const shop = await Shops.findOne({
+                where: {
+                    enabled: 1
+                },
+                attributes: [
+                    ['no', 'shop_no'],
+                    'region_no',
+                    'id',
+                    'name',
+                    'tel',
+                    'shop_image',
+                    'representative_name',
+                    'zone_code',
+                    'road_address',
+                    'road_detail_address',
+                    'region_address',  
+                    'region_detail_address',
+                    'latitude',
+                    'longitude',  
+                    'opening_time',
+                    'closing_time',
+                    'created_datetime',
+                ],
+                raw: true
+            });
+
+            next({ 
+                ...shop,
+                created_datetime: dayjs(shop.created_datetime).format(`M월 D일(ddd) a h시 m분`),
+            });
         } catch (e) {
             next(e);
         }
