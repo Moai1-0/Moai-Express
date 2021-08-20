@@ -1,5 +1,5 @@
 require('dotenv').config();
-const queryString = require('querystring');
+const queryString = require('query-string');
 
 let database;
 if (process.env.NODE_ENV === 'production') {
@@ -32,5 +32,9 @@ module.exports = {
         region: process.env.S3_REGION,
         bucket: process.env.S3_BUCKET,
         endPoint: process.env.S3_ENDPOINT
-    }
+    },
+    kakao: {
+        client_id: process.env.KAKAO_API_KEY,
+        redirect_uri: process.env.KAKAO_REDIRECT_URI,
+    },
 };

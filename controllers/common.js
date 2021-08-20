@@ -1,4 +1,8 @@
+const axios = require('axios');
+const queryString = require('query-string');
 const err = require('http-errors');
+const { param } = require('../utils/params');
+const { kakao } = require('../config');
 
 const controller = {
     async main(req, res, next) {
@@ -72,7 +76,32 @@ const controller = {
             next(e);
         }
 
-    }
+    },
+    async getKakaoCodeFromCallback({ user, body }, { pool }, next) {
+        try {
+            const code = param(body, 'code');
+            const { client_id, redirect_uri } = kakao;
+            const data = {
+                grant_type: 'authorization_code',
+                code,
+                client_id,
+                redirect_uri
+            }
+            const options = {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                data: queryString.stringify(data),
+                url: `https://kauth.kakao.com/oauth/token`      
+            };
+
+            const res = await axios(options);
+            const { access_token, refresh_token } = res.data;
+
+            next({ access_token, refresh_token });
+        } catch (e) {
+            next(e);
+        }
+    },
 };
 
 module.exports = controller;

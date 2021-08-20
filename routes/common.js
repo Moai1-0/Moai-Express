@@ -12,8 +12,7 @@ router.get(
     passport.authenticate('kakao-login', { failureRedirect: '/kakao' }),
     common.signupWithKakao
 );
-
-
+router.post('/oauth/callback/kakao', common.getKakaoCodeFromCallback);
 
 
 module.exports = router;
