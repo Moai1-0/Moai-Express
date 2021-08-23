@@ -4,7 +4,10 @@ const { param, auth } = require('../utils/params');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const { encodeToken } = require('../utils/token');
 const { S3 } = require('../utils/multer');
-
+const schedule = require("node-schedule");
+const tp = require('../utils/mailer');
+const { send } = require('../utils/solapi');
+require('dotenv').config();
 const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
 
@@ -31,6 +34,29 @@ const controller = {
             const discount_rate = parseFloat(discounted_price / regular_price * 100).toFixed(2);
             const is_bookmark = param(body, "is_bookmark");
 
+            // console.log(expiry_datetime);
+            // let info = await tp.sendMail({
+            //     // 보내는 곳의 이름과, 메일 주소를 입력
+            //     from: `"WDMA Team" <${process.env.NODEMAILER_USER}>`,
+            //     // 받는 곳의 메일 주소를 입력
+            //     to: process.env.NODEMAILER_USER,
+            //     // 보내는 메일의 제목을 입력
+            //     subject: 'WDMA Auth Number',
+            //     // 보내는 메일의 내용을 입력
+            //     // text: 일반 text로 작성된 내용
+            //     // html: html로 작성된 내용
+            //     text: 'asdasdasd',
+            //     html: `<b>${"asdasdasd"}</b>`,
+            // });
+            // send({
+            //     messages: [
+            //         {
+            //             to: '01043987759',
+            //             from: '01043987759',
+            //             text: '모아이 4000억 exit'
+            //         }
+            //     ]
+            // });
 
 
 
