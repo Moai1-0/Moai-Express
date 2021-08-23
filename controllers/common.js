@@ -1,7 +1,7 @@
 const axios = require('axios');
 const queryString = require('query-string');
 const url = require('url');
-const qs = require('querystring');
+const qs = require('query-string');
 const err = require('http-errors');
 
 const { param } = require('../utils/params');
