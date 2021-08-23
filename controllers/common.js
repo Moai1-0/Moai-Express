@@ -1,11 +1,11 @@
 const axios = require('axios');
 const queryString = require('query-string');
-const err = require('http-errors');
-const { param } = require('../utils/params');
-const { kakao } = require('../config');
 const url = require('url');
 const qs = require('querystring');
-const axios = require('axios');
+const err = require('http-errors');
+
+const { param } = require('../utils/params');
+const { kakao } = require('../config');
 const { encodeToken } = require('../utils/token');
 const { Users, User_sns_data, Shops, sequelize, Accounts } = require('../models');
 
@@ -195,9 +195,49 @@ const controller = {
             };
 
             const res2 = await axios(options2);
-            console.log(res2.data);
+            
+            const {
+                id,
+                properties: {
+                    nickname
+                },
+                kakao_account: {
+                    email
+                }
+            } = res2.data;
 
-            next({ access_token, refresh_token });
+            const user = await Users.findOne({
+                include: [
+                    {
+                        model: User_sns_data,
+                        as: "user_sns_data",
+                        where: {
+                            id,
+                            type: 'kakao'
+                        }
+                    },
+                ],
+                where: {
+                    enabled: 1,
+                },
+                raw: true
+            });
+
+            if (!user) {
+                next({
+                    is_user: false,
+                    id,
+                    email,
+                    nickname,
+                });
+            } else {
+                next({
+                    is_user: true,
+                    id,
+                    email,
+                    nickname,
+                });
+            }
         } catch (e) {
             next(e);
         }
