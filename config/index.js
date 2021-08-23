@@ -21,6 +21,13 @@ module.exports = {
         port: Number(database.port),
         connectionLimit: Number(database.connectionlimit),
     },
+    orm: {
+        host: database.host,
+        username: database.user,
+        password: database.password,
+        database: database.name,
+        dialect: "mysql",
+    },
     jwt: {
         secretKey: process.env.JWT_SECRET_KEY,
         algorithm: process.env.JWT_ALGORITHM,
