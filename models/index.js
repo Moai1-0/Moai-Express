@@ -11,7 +11,7 @@ const models = initModels(sequelize);
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 
-db.Account = models.account;
+db.Accounts = models.accounts;
 db.Admins = models.admins;
 db.Log_order = models.log_order;
 db.Log_point = models.log_point;

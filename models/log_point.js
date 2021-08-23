@@ -11,13 +11,20 @@ module.exports = function(sequelize, DataTypes) {
     user_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "고유번호"
+      comment: "고유번호",
+      references: {
+        model: 'users',
+        key: 'no'
+      }
     },
-    point_no: {
-      type: DataTypes.STRING(20),
+    point_account_no: {
+      type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      defaultValue: "",
-      comment: "회원명"
+      comment: "회원명",
+      references: {
+        model: 'point_accounts',
+        key: 'no'
+      }
     },
     type: {
       type: DataTypes.ENUM('add','use'),
@@ -46,6 +53,20 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "no" },
+        ]
+      },
+      {
+        name: "log_point_users_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "user_no" },
+        ]
+      },
+      {
+        name: "log_point_point_accounts_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "point_account_no" },
         ]
       },
     ]

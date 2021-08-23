@@ -11,12 +11,20 @@ module.exports = function(sequelize, DataTypes) {
     shop_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "shops테이블고유번호"
+      comment: "shops테이블고유번호",
+      references: {
+        model: 'shops',
+        key: 'no'
+      }
     },
     product_no: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "products테이블고유번호"
+      comment: "products테이블고유번호",
+      references: {
+        model: 'products',
+        key: 'no'
+      }
     },
     created_datetime: {
       type: DataTypes.DATE,
@@ -51,6 +59,20 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "no" },
+        ]
+      },
+      {
+        name: "product_bookmark_shops_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "shop_no" },
+        ]
+      },
+      {
+        name: "product_bookmark_products_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "product_no" },
         ]
       },
     ]

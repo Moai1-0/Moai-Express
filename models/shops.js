@@ -11,7 +11,11 @@ module.exports = function(sequelize, DataTypes) {
     region_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "regions테이블고유번호"
+      comment: "regions테이블고유번호",
+      references: {
+        model: 'regions',
+        key: 'no'
+      }
     },
     id: {
       type: DataTypes.STRING(40),
@@ -129,6 +133,13 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "no" },
+        ]
+      },
+      {
+        name: "shops_regions_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "region_no" },
         ]
       },
       {

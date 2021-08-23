@@ -11,7 +11,11 @@ module.exports = function(sequelize, DataTypes) {
     shop_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "shops테이블고유번호"
+      comment: "shops테이블고유번호",
+      references: {
+        model: 'shops',
+        key: 'no'
+      }
     },
     name: {
       type: DataTypes.STRING(30),
@@ -110,6 +114,13 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "no" },
+        ]
+      },
+      {
+        name: "products_shops_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "shop_no" },
         ]
       },
       {

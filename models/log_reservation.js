@@ -8,19 +8,35 @@ module.exports = function(sequelize, DataTypes) {
     },
     user_no: {
       type: DataTypes.INTEGER.UNSIGNED,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'no'
+      }
     },
     shop_no: {
       type: DataTypes.INTEGER.UNSIGNED,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'shops',
+        key: 'no'
+      }
     },
     reservation_no: {
       type: DataTypes.INTEGER.UNSIGNED,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'reservations',
+        key: 'no'
+      }
     },
     product_no: {
       type: DataTypes.INTEGER.UNSIGNED,
-      allowNull: false
+      allowNull: false,
+      references: {
+        model: 'products',
+        key: 'no'
+      }
     },
     created_datetime: {
       type: DataTypes.DATE,
@@ -37,6 +53,34 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "no" },
+        ]
+      },
+      {
+        name: "log_reservation_users_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "user_no" },
+        ]
+      },
+      {
+        name: "log_reservation_shops_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "shop_no" },
+        ]
+      },
+      {
+        name: "log_reservation_reservations_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "reservation_no" },
+        ]
+      },
+      {
+        name: "log_reservation_products_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "product_no" },
         ]
       },
     ]

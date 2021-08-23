@@ -11,22 +11,38 @@ module.exports = function(sequelize, DataTypes) {
     user_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "users테이블고유번호"
+      comment: "users테이블고유번호",
+      references: {
+        model: 'users',
+        key: 'no'
+      }
     },
     product_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "products테이블고유번호"
+      comment: "products테이블고유번호",
+      references: {
+        model: 'products',
+        key: 'no'
+      }
     },
     shop_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "shops테이블고유번호"
+      comment: "shops테이블고유번호",
+      references: {
+        model: 'shops',
+        key: 'no'
+      }
     },
     reservation_no: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      comment: "reservations테이블고유번호"
+      comment: "reservations테이블고유번호",
+      references: {
+        model: 'reservations',
+        key: 'no'
+      }
     },
     purchase_quantity: {
       type: DataTypes.INTEGER.UNSIGNED,
@@ -81,6 +97,34 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "no" },
+        ]
+      },
+      {
+        name: "orders_users_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "user_no" },
+        ]
+      },
+      {
+        name: "orders_products_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "product_no" },
+        ]
+      },
+      {
+        name: "orders_shops_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "shop_no" },
+        ]
+      },
+      {
+        name: "orders_reservations_no_fk",
+        using: "BTREE",
+        fields: [
+          { name: "reservation_no" },
         ]
       },
     ]
