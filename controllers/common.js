@@ -87,15 +87,24 @@ const controller = {
                 client_id,
                 redirect_uri
             }
-            const options = {
+            const options1 = {
                 method: 'POST',
+                url: `https://kauth.kakao.com/oauth/token`,      
                 headers: { 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
                 data: queryString.stringify(data),
-                url: `https://kauth.kakao.com/oauth/token`      
             };
 
-            const res = await axios(options);
-            const { access_token, refresh_token } = res.data;
+            const res1 = await axios(options1);
+            const { access_token, refresh_token } = res1.data;
+
+            const options2 = {
+                method: 'GET',
+                url: `https://kapi.kakao.com/v2/user/me`,      
+                headers: { 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8', 'Authorization': `Bearer ${access_token}` },
+            };
+
+            const res2 = await axios(options2);
+            console.log(res2.data);
 
             next({ access_token, refresh_token });
         } catch (e) {
