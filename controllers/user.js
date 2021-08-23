@@ -614,57 +614,6 @@ const controller = {
             next(e);
         }
     },
-    async cancelReservation({ user, body }, { pool }, next) {
-        try {
-            const user_no = auth(user, 'user_no');
-            const reservation_no = param(body, 'reservation_no');
-
-            const [result] = await pool.query(`
-                SELECT
-                product_no,
-                user_no,
-                status,
-                total_purchase_quantity
-                FROM
-                reservations
-                WHERE no = ?
-                AND enabled = 1;
-            `, [reservation_no]);
-
-            if (result.length < 1 || result[0].status === 'canceled') throw err(400);
-            if (result[0].user_no !== user_no) throw err(401);
-
-            const connection = await pool.getConnection(async conn => await conn);
-            try {
-                await connection.beginTransaction();
-                await connection.query(`
-                    UPDATE
-                    reservations
-                    SET status = 'pre_canceled'
-                    WHERE no = ?
-                    AND enabled = 1
-                `, [reservation_no]);
-
-                await connection.query(`
-                    UPDATE
-                    products
-                    SET rest_quantity = rest_quantity + ?
-                    WHERE no = ?
-                    AND enabled = 1
-                `, [result[0].total_purchase_quantity, result[0].product_no]);
-
-                await connection.commit();
-                next({ message: "취소되었습니다." });
-            } catch (e) {
-                await connection.rollback();
-                next(e);
-            } finally {
-                connection.release();
-            }
-        } catch (e) {
-            next(e);
-        }
-    },
     async getRemainingPoint({ user }, { pool }, next) {
         try {
             const user_no = auth(user, 'user_no');
