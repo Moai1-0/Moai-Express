@@ -1,10 +1,7 @@
 const { config, msg } = require('solapi');
-require('dotenv').config();
+const config = require('../config').solapi;
 // apiKey, apiSecret 설정 (설정하지 않으면 패키지 홈의 config.json 파일의 설정을 참고합니다.)
-config.init({
-    apiKey: process.env.SOLAPI_API_KEY,
-    apiSecret: process.env.SOLAPI_API_SECRET_KEY
-});
+config.init({ ...config });
 
 async function send(params = {}) {
     try {

@@ -52,5 +52,9 @@ module.exports = {
         storageBucket: process.env.FB_STOREAGE_BUCKET,
         messagingSenderId: process.env.FB_MESSAGING_SENDER_ID,
         appId: process.env.FB_APP_ID,
+    },
+    solapi: {
+        apiKey: process.env.SOLAPI_API_KEY,
+        apiSecret: process.env.SOLAPI_API_SECRET_KEY
     }
 };
