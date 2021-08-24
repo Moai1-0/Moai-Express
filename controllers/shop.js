@@ -33,33 +33,6 @@ const controller = {
             const pickup_datetime = param(body, "pickup_datetime");
             const discount_rate = parseFloat(discounted_price / regular_price * 100).toFixed(2);
             const is_bookmark = param(body, "is_bookmark");
-
-            // console.log(expiry_datetime);
-            // let info = await tp.sendMail({
-            //     // 보내는 곳의 이름과, 메일 주소를 입력
-            //     from: `"WDMA Team" <${process.env.NODEMAILER_USER}>`,
-            //     // 받는 곳의 메일 주소를 입력
-            //     to: process.env.NODEMAILER_USER,
-            //     // 보내는 메일의 제목을 입력
-            //     subject: 'WDMA Auth Number',
-            //     // 보내는 메일의 내용을 입력
-            //     // text: 일반 text로 작성된 내용
-            //     // html: html로 작성된 내용
-            //     text: 'asdasdasd',
-            //     html: `<b>${"asdasdasd"}</b>`,
-            // });
-            // send({
-            //     messages: [
-            //         {
-            //             to: '01043987759',
-            //             from: '01043987759',
-            //             text: '모아이 4000억 exit'
-            //         }
-            //     ]
-            // });
-
-
-
             const connection = await pool.getConnection(async conn => await conn);
 
             try {
@@ -94,14 +67,14 @@ const controller = {
                     ]);
                 files.map(async (file, index) => {
                     const { instance, params } = S3;
-                    // 이름 + 등록 시간 + shop_no
-                    const file_name = `product/${result.insertId}-${dayjs().format("YYYYMMDDHHmmss")}-${shop_no}-${index + 1}`;
+                    // 등록 시간+ product_no + shop_no
+                    const file_name = `product/${dayjs().format("YYYYMMDDHHmmss")}-${result.insertId}-${shop_no}-${index + 1}`;
                     params.Key = file_name;
                     params.Body = file.buffer;
                     instance.upload(params, (error, data) => {
                         if (error) throw err.InternalServerError('S3 에러');
                     });
-                    const [result2] = await connection.query(`
+                    await connection.query(`
                         INSERT INTO product_images (
                             product_no,
                             name,
@@ -587,9 +560,6 @@ const controller = {
                 // || result[0].actual_quantity != null
             ) throw err.BadRequest("예상 재고수 보다 많이 입력");
 
-
-
-
             // actual >= reserved_quantity(예약 완료된 재고) -> 그냥 모두 픽업처리
             // actual < reserved_quantity -> 선착순으로 픽업 나머지 환급
 
@@ -630,17 +600,15 @@ const controller = {
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
-                await pool.query(`
-                UPDATE products SET
-                actual_quantity = ?
-                WHERE no = ?
-            `, [actual_quantity, product_no]);
-
+                await connection.query(`
+                    UPDATE products SET
+                    actual_quantity = ?
+                    WHERE no = ?
+                `, [actual_quantity, product_no]);
 
                 // 예약 총 재고 보다 총 실재고가 많은경우;
 
                 if (reserved_quantity > actual_quantity) {
-
                     for (let i = 0; i < result1.length; i++) {
                         let temp_reserved_quantity = result1[i].total_purchase_quantity;
                         // 싹 다 픽업 처리(실재고가 예약 주문보다 많은 경우)
