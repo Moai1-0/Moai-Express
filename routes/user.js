@@ -7,6 +7,8 @@ router.get('/products', user.getProducts); // 상품 리스트 조회
 router.get('/product', user.getProduct); // 상품 상세 조회
 router.get('/products/search', user.searchProducts); // 상품 검색
 router.post('/signup', user.signup); // 회원가입
+router.post('/signup/sms', user.sendAuthCode);
+router.post('/signup/sms/check', user.checkAuthCode);
 router.post('/signin', user.signin); // 로그인
 router.post('/reserve', checkUser, user.reserveProduct); // 상품 예약
 router.get('/status/reservation', checkUser, user.getReservationStatus); // 주문현황 - 예약현황 리스트

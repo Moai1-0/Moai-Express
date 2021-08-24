@@ -1,11 +1,19 @@
 const err = require('http-errors');
 const dayjs = require('dayjs');
+const timezone = require('dayjs/plugin/timezone');
+const utc = require('dayjs/plugin/utc');
+dayjs.extend(utc)
+dayjs.extend(timezone);
 require('dayjs/locale/ko');
 dayjs.locale('ko');
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const check = require('../utils/check');
+const fb = require('../utils/firebase');
+const { generateRandomCode } = require('../utils/random')
+const { send } = require('../utils/solapi');
+const { scheduleJob } = require('../utils/scheduler');
 
 
 const PAGINATION_COUNT = 10;
@@ -1362,14 +1370,68 @@ const controller = {
                 ON r.no = ro.reservation_no;
                 `, [ reservation_no, user_no ]);
 
-            console.log(result);
-
             next({ 
                 ...result[0],
                 reservation_created_datetime: dayjs(result[0].reservation_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 pickup_created_datetime: dayjs(result[0].pickup_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 order_created_datetime: dayjs(result[0].order_created_datetime).format(`M월 D일(ddd) a h시 m분`),
             });            
+        } catch (e) {
+            next(e);
+        }
+    },
+    async sendAuthCode({ body }, { pool }, next) {
+        try {
+            const phone = param(body, 'phone');
+            const authCode = generateRandomCode(6);
+
+            try {
+                fb.ref(`/auth/sms/${phone}`).set({
+                    authCode
+                });
+                scheduleJob(dayjs().tz("Asia/Seoul").add(5, 'm').format(`YYYY-MM-DD HH:mm:ss`), () => {
+                    fb.ref(`/auth/sms/${phone}`).remove();
+                });
+                send({
+                    messages: [
+                        {
+                            to: phone,
+                            from: '01043987759',
+                            text: `[스탁인] 인증번호는 ${authCode}입니다.`
+                        }
+                    ]
+                });
+                next({ authCode });
+            } catch (e) {
+                fb.ref(`/auth/sms/${phone}`).remove();
+                next(e);
+            }
+
+        } catch (e) {
+            next(e);
+        }
+    },
+    async checkAuthCode({ body }, { pool }, next) {
+        try {
+            const phone = param(body, 'phone'); // key
+            const authCode = param(body, 'authCode'); // value
+            
+            try {
+                const snapshot = await fb.ref(`/auth/sms/${phone}`).get();
+                if (snapshot.exists()) {
+                    const cacheValue = snapshot.val().authCode;
+                    if (cacheValue === authCode) {
+                        fb.ref(`/auth/sms/${phone}`).remove();
+                        next({ message: `인증에 성공하셨습니다.` });
+                    } else {
+                        throw err(400, '인증번호를 다시 요청해주세요.');    
+                    }
+                } else {
+                    throw err(400, '인증번호를 다시 요청해주세요.');
+                }
+            } catch (e) {
+                next(e);                
+            }
         } catch (e) {
             next(e);
         }
