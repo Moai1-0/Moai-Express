@@ -46,7 +46,7 @@ const controller = {
                 },
                 raw: true
             });
-
+            console.log(user);
             if (!user) {
                 // 이름은 여기서 받지말고 추가정보에서 받아야할듯(바뀔 수 있으니까)
                 const new_user = await Users.create({

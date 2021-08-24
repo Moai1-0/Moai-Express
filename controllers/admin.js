@@ -190,13 +190,14 @@ const controller = {
         } catch (e) {
             next(e);
         }
-    }, async getUsers({ admin, query }, { pool }, next) {
+    },
+    async getUsers({ admin, query }, { pool }, next) {
         try {
             // const admin_no = auth(admin, "admin_no");
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
-            
+
             const users = await Users.findAndCountAll({
                 where: {
                     enabled: 1
@@ -215,21 +216,22 @@ const controller = {
                 raw: true
             });
 
-            next({ 
+            next({
                 total_count: users.count,
                 users: users.rows.map((user) => ({
                     ...user,
                     created_datetime: dayjs(user.created_datetime).format(`M월 D일(ddd) a h시 m분`),
-                })) 
+                }))
             });
         } catch (e) {
             next(e);
         }
-    }, async getUser({ admin, query }, { pool }, next) {
+    },
+    async getUser({ admin, query }, { pool }, next) {
         try {
             // const admin_no = auth(admin, "admin_no");
             const user_no = param(query, 'user_no');
-            
+
             const user = await Users.findOne({
                 where: {
                     enabled: 1
@@ -246,20 +248,21 @@ const controller = {
                 raw: true
             });
 
-            next({ 
+            next({
                 ...user,
                 created_datetime: dayjs(user.created_datetime).format(`M월 D일(ddd) a h시 m분`),
             });
         } catch (e) {
             next(e);
         }
-    }, async getShops({ admin, query }, { pool }, next) {
+    },
+    async getShops({ admin, query }, { pool }, next) {
         try {
             // const admin_no = auth(admin, "admin_no");
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
-            
+
             const shops = await Shops.findAndCountAll({
                 where: {
                     enabled: 1
@@ -275,10 +278,10 @@ const controller = {
                     'zone_code',
                     'road_address',
                     'road_detail_address',
-                    'region_address',  
+                    'region_address',
                     'region_detail_address',
                     'latitude',
-                    'longitude',  
+                    'longitude',
                     'opening_time',
                     'closing_time',
                     'created_datetime',
@@ -288,21 +291,22 @@ const controller = {
                 raw: true
             });
 
-            next({ 
+            next({
                 total_count: shops.count,
                 shops: shops.rows.map((shop) => ({
                     ...shop,
                     created_datetime: dayjs(shop.created_datetime).format(`M월 D일(ddd) a h시 m분`),
-                })) 
+                }))
             });
         } catch (e) {
             next(e);
         }
-    }, async getShop({ admin, query }, { pool }, next) {
+    },
+    async getShop({ admin, query }, { pool }, next) {
         try {
             // const admin_no = auth(admin, "admin_no");
             const shop_no = param(query, 'shop_no');
-            
+
             const shop = await Shops.findOne({
                 where: {
                     enabled: 1
@@ -318,10 +322,10 @@ const controller = {
                     'zone_code',
                     'road_address',
                     'road_detail_address',
-                    'region_address',  
+                    'region_address',
                     'region_detail_address',
                     'latitude',
-                    'longitude',  
+                    'longitude',
                     'opening_time',
                     'closing_time',
                     'created_datetime',
@@ -329,7 +333,7 @@ const controller = {
                 raw: true
             });
 
-            next({ 
+            next({
                 ...shop,
                 created_datetime: dayjs(shop.created_datetime).format(`M월 D일(ddd) a h시 m분`),
             });

@@ -14,4 +14,19 @@ let transporter = nodemailer.createTransport({
         pass: process.env.NODEMAILER_PASS,
     },
 });
+const sendEmail = async () => {
+    await transporter.sendMail({
+        //보내는 곳의 이름과, 메일 주소를 입력
+        from: `"WDMA Team" <${process.env.NODEMAILER_USER}>`,
+        // 받는 곳의 메일 주소를 입력
+        to: process.env.NODEMAILER_USER,
+        // 보내는 메일의 제목을 입력
+        subject: 'WDMA Auth Number',
+        // 보내는 메일의 내용을 입력
+        // text: 일반 text로 작성된 내용
+        // html: html로 작성된 내용
+        text: 'asdasdasd',
+        html: `<b>${"asdasdasd"}</b>`,
+    });
+};
 module.exports = transporter;
