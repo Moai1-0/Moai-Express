@@ -16,7 +16,8 @@ const { send } = require('../utils/solapi');
 const { scheduleJob } = require('../utils/scheduler');
 
 
-const PAGINATION_COUNT = 10;
+const PAGINATION_COUNT = 5;
+const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
 
 const controller = {
     async controllerFormat({ user, body, query }, { pool }, next) {
@@ -51,8 +52,12 @@ const controller = {
             const [results] = await pool.query(`
                 SELECT
                 COUNT(*) AS total_count
-                FROM products
-                WHERE enabled = 1;
+                FROM products AS p
+                JOIN shops AS s
+                ON p.shop_no = s.no
+                WHERE s.region_no = ?
+                AND s.enabled = 1
+                AND p.enabled = 1;
 
                 SELECT
                 p.no AS product_no,
@@ -68,7 +73,7 @@ const controller = {
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
-                LEFT JOIN (
+                JOIN (
                     SELECT
                     product_no,
                     path
@@ -82,12 +87,13 @@ const controller = {
                 AND p.enabled = 1
                 ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC': sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
                 LIMIT ? OFFSET ?;
-            `, [region_no, count, offset]);
+            `, [region_no, region_no, count, offset]);
 
             next({
                 total_count: results[0][0].total_count,
                 products: results[1].map((product) => ({
                     ...product,
+                    path: BASE_URL + product.path,
                     discount_rate: parseFloat(product.discount_rate),
                     expiry_datetime: dayjs(product.expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
                     impending: dayjs(product.expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
@@ -1397,7 +1403,7 @@ const controller = {
                         {
                             to: phone,
                             from: '01043987759',
-                            text: `[스탁인] 인증번호는 ${authCode}입니다.`
+                            text: `인증번호는 ${authCode}입니다.`
                         }
                     ]
                 });
