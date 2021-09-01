@@ -1398,7 +1398,7 @@ const controller = {
                 scheduleJob(dayjs().tz("Asia/Seoul").add(5, 'm').format(`YYYY-MM-DD HH:mm:ss`), () => {
                     fb.ref(`/auth/sms/${phone}`).remove();
                 });
-                send({
+                const res = await send({
                     messages: [
                         {
                             to: phone,
@@ -1407,6 +1407,9 @@ const controller = {
                         }
                     ]
                 });
+                if(res.error) {
+                    throw err(400);
+                }
                 next({ authCode });
             } catch (e) {
                 fb.ref(`/auth/sms/${phone}`).remove();

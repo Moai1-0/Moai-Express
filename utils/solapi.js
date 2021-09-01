@@ -7,10 +7,12 @@ async function send(params = {}) {
     try {
         const result = await msg.send(params);
         console.log('RESULT:', result);
+        return result;
     } catch (e) {
         console.log('statusCode:', e.statusCode);
         console.log('errorCode:', e.error.errorCode);
         console.log('errorMessage:', e.error.errorMessage);
+        return e;
     }
 }
 module.exports = { send };
