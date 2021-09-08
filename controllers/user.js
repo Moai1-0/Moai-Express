@@ -62,10 +62,10 @@ const controller = {
                 SELECT
                 p.no AS product_no,
                 p.name AS product_name,
-                p.rest_quantity,
                 p.regular_price,
                 p.discounted_price,
                 p.discount_rate,
+                p.return_price,
                 p.expiry_datetime,
                 s.no AS shop_no,
                 s.name AS shop_name,
@@ -93,10 +93,13 @@ const controller = {
                 total_count: results[0][0].total_count,
                 products: results[1].map((product) => ({
                     ...product,
+                    regular_price: product.regular_price.toLocaleString('ko-KR'),
+                    discounted_price: product.discounted_price.toLocaleString('ko-KR'),
+                    return_price: product.return_price.toLocaleString('ko-KR'), 
                     path: BASE_URL + product.path,
                     discount_rate: parseFloat(product.discount_rate),
+                    raw_expiry_datetime: product.expiry_datetime,
                     expiry_datetime: dayjs(product.expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
-                    impending: dayjs(product.expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
                 }))
             });
         } catch (e) {
@@ -110,10 +113,14 @@ const controller = {
                 SELECT
                 p.no AS product_no,
                 i.paths,
-                p.name AS prduct_name,
+                p.name AS product_name,
                 p.shop_no,
                 s.name AS shop_name,
                 s.tel,
+                s.road_address,
+                s.region_address,
+                s.latitude,
+                s.longitude,
                 p.expected_quantity,
                 p.rest_quantity,
                 p.regular_price,
@@ -147,9 +154,15 @@ const controller = {
             next({
                 ...result[0],
                 discount_rate: parseFloat(result[0].discount_rate),
-                paths: result[0].paths.split(',') || [],
-                expiry_datetime: dayjs(result[0].expiry_datetime).format(`M월 D일(ddd) a h시 m분`),
-                pickup_datetime: dayjs(result[0].pickup_datetime).format(`M월 D일(ddd) a h시 m분`),
+                paths: result[0].paths.split(',').map((path) => (
+                    BASE_URL + path
+                )) || [],
+                regular_price: result[0].regular_price.toLocaleString('ko-KR'),
+                discounted_price: result[0].discounted_price.toLocaleString('ko-KR'),
+                return_price: result[0].return_price.toLocaleString('ko-KR'),
+                raw_expiry_datetime: result[0].expiry_datetime,
+                expiry_datetime: dayjs(result[0].expiry_datetime).format(`YYYY-MM-DD(ddd) a h:m`),
+                pickup_datetime: dayjs(result[0].pickup_datetime).format(`YYYY-MM-DD(ddd) a h:m`),
                 impending: dayjs(result[0].expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
             });
         } catch (e) {
