@@ -7,6 +7,7 @@ router.get('/products', user.getProducts); // 상품 리스트 조회
 router.get('/product', user.getProduct); // 상품 상세 조회
 router.get('/products/search', user.searchProducts); // 상품 검색
 router.post('/signup', user.signup); // 회원가입
+router.post('/signup/email/check', user.checkEmail);
 router.post('/signup/sms', user.sendAuthCode);
 router.post('/signup/sms/check', user.checkAuthCode);
 router.post('/signin', user.signin); // 로그인
