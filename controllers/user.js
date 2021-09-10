@@ -526,6 +526,80 @@ const controller = {
             next(e);
         }
     },
+    async checkEmail({ body }, { pool }, next) {
+        try {
+            const email = param(body, 'email');
+            const [ result ] = await pool.query(`
+                SELECT *
+                FROM users
+                WHERE email = ?
+                AND enabled = 1
+            `, [email]);
+            if (result.length > 0) throw err(409, '중복된 이메일입니다.');
+            next({ message: `중복되지 않은 이메일입니다.` });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async sendAuthCode({ body }, { pool }, next) {
+        try {
+            const phone = param(body, 'phone');
+            const authCode = generateRandomCode(6);
+
+            try {
+                fb.ref(`/auth/sms/${phone}`).set({
+                    authCode
+                });
+                scheduleJob(dayjs().tz("Asia/Seoul").add(5, 'm').format(`YYYY-MM-DD HH:mm:ss`), () => {
+                    fb.ref(`/auth/sms/${phone}`).remove();
+                });
+                const res = await send({
+                    messages: [
+                        {
+                            to: phone,
+                            from: '01043987759',
+                            text: `인증번호는 ${authCode}입니다.`
+                        }
+                    ]
+                });
+                if(res.error) {
+                    throw err(400);
+                }
+                next({ authCode });
+            } catch (e) {
+                fb.ref(`/auth/sms/${phone}`).remove();
+                next(e);
+            }
+
+        } catch (e) {
+            next(e);
+        }
+    },
+    async checkAuthCode({ body }, { pool }, next) {
+        try {
+            const phone = param(body, 'phone'); // key
+            const authCode = param(body, 'authCode'); // value
+            
+            try {
+                const snapshot = await fb.ref(`/auth/sms/${phone}`).get();
+                if (snapshot.exists()) {
+                    const cacheValue = snapshot.val().authCode;
+                    if (cacheValue === authCode) {
+                        fb.ref(`/auth/sms/${phone}`).remove();
+                        next({ message: `인증에 성공하셨습니다.` });
+                    } else {
+                        throw err(400, '인증번호를 다시 요청해주세요.');    
+                    }
+                } else {
+                    throw err(400, '인증번호를 다시 요청해주세요.');
+                }
+            } catch (e) {
+                next(e);                
+            }
+        } catch (e) {
+            next(e);
+        }
+    },
     async signin({ body }, { pool }, next) {
         try {
             const type = param(body, 'type', 'normal');
@@ -1395,65 +1469,6 @@ const controller = {
                 pickup_created_datetime: dayjs(result[0].pickup_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 order_created_datetime: dayjs(result[0].order_created_datetime).format(`M월 D일(ddd) a h시 m분`),
             });            
-        } catch (e) {
-            next(e);
-        }
-    },
-    async sendAuthCode({ body }, { pool }, next) {
-        try {
-            const phone = param(body, 'phone');
-            const authCode = generateRandomCode(6);
-
-            try {
-                fb.ref(`/auth/sms/${phone}`).set({
-                    authCode
-                });
-                scheduleJob(dayjs().tz("Asia/Seoul").add(5, 'm').format(`YYYY-MM-DD HH:mm:ss`), () => {
-                    fb.ref(`/auth/sms/${phone}`).remove();
-                });
-                const res = await send({
-                    messages: [
-                        {
-                            to: phone,
-                            from: '01043987759',
-                            text: `인증번호는 ${authCode}입니다.`
-                        }
-                    ]
-                });
-                if(res.error) {
-                    throw err(400);
-                }
-                next({ authCode });
-            } catch (e) {
-                fb.ref(`/auth/sms/${phone}`).remove();
-                next(e);
-            }
-
-        } catch (e) {
-            next(e);
-        }
-    },
-    async checkAuthCode({ body }, { pool }, next) {
-        try {
-            const phone = param(body, 'phone'); // key
-            const authCode = param(body, 'authCode'); // value
-            
-            try {
-                const snapshot = await fb.ref(`/auth/sms/${phone}`).get();
-                if (snapshot.exists()) {
-                    const cacheValue = snapshot.val().authCode;
-                    if (cacheValue === authCode) {
-                        fb.ref(`/auth/sms/${phone}`).remove();
-                        next({ message: `인증에 성공하셨습니다.` });
-                    } else {
-                        throw err(400, '인증번호를 다시 요청해주세요.');    
-                    }
-                } else {
-                    throw err(400, '인증번호를 다시 요청해주세요.');
-                }
-            } catch (e) {
-                next(e);                
-            }
         } catch (e) {
             next(e);
         }
