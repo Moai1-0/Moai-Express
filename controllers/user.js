@@ -149,7 +149,7 @@ const controller = {
                 AND s.enabled = 1;
             `, [product_no, product_no]);
 
-            if (result[0].length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
+            if (result.length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
 
             next({
                 ...result[0],
