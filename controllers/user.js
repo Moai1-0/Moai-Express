@@ -546,6 +546,13 @@ const controller = {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
 
+            const [ result ] = await pool.query(`
+                SELECT *
+                FROM users
+                WHERE phone = ?
+                AND enabled = 1
+            `, [phone]);
+            if (result.length > 0) throw err(409, '중복된 전화번호입니다.');
             try {
                 fb.ref(`/auth/sms/${phone}`).set({
                     authCode
@@ -570,7 +577,6 @@ const controller = {
                 fb.ref(`/auth/sms/${phone}`).remove();
                 next(e);
             }
-
         } catch (e) {
             next(e);
         }
