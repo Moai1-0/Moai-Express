@@ -24,5 +24,6 @@ router.get('/point', checkUser, user.getRemainingPoint); // 잔여 포인트 조
 router.post('/return', checkUser, user.applyForReturn); // 환급 신청
 router.get('/account', checkUser, user.getReturnAccount); // 환불 계좌 조회
 router.patch('/account', checkUser, user.editReturnAccount); // 환불 계좌 수정
+router.get('/mypage', checkUser, user.getUserInfo);
 
 module.exports = router;

@@ -14,6 +14,7 @@ const fb = require('../utils/firebase');
 const { generateRandomCode } = require('../utils/random')
 const { send } = require('../utils/solapi');
 const { scheduleJob } = require('../utils/scheduler');
+const bankCode = require('../config/bankCode.json');
 
 
 const PAGINATION_COUNT = 5;
@@ -420,7 +421,7 @@ const controller = {
             const birthday = param(body, 'birthday', birthday => parser.emptyToNull(birthday));
             const gender = param(body, 'gender', null);
             condition.contains(gender, ['male', 'female', 'etc', null]);
-            const bank = param(body, 'bank'); // https://superad.tistory.com/229 (개설기관 표준코드)
+            const bank_code = param(body, 'bank_code'); // https://superad.tistory.com/229 (개설기관 표준코드)
             // condition check needed
             const account_number = param(body, 'account_number');
             // account_number check needed
@@ -503,12 +504,13 @@ const controller = {
                 await connection.query(`
                     INSERT INTO accounts (
                         user_no,
-                        bank,
+                        bank_name,
+                        bank_code,
                         account_number
                     )
                     VALUES
-                    (?, ?, ?);
-                `, [user_no, bank, account_number]);
+                    (?, ${bankCode[bank_code]}, ?, ?);
+                `, [user_no, bank_code, account_number]);
                 await connection.query(`
                     INSERT INTO point_accounts (user_no)
                     VALUES (?);
@@ -560,19 +562,20 @@ const controller = {
                 scheduleJob(dayjs().tz("Asia/Seoul").add(5, 'm').format(`YYYY-MM-DD HH:mm:ss`), () => {
                     fb.ref(`/auth/sms/${phone}`).remove();
                 });
-                const res = await send({
-                    messages: [
-                        {
-                            to: phone,
-                            from: '01043987759',
-                            text: `인증번호는 ${authCode}입니다.`
-                        }
-                    ]
-                });
-                if(res.error) {
-                    throw err(400);
-                }
-                next({ authCode });
+                // const res = await send({
+                //     messages: [
+                //         {
+                //             to: phone,
+                //             from: '01043987759',
+                //             text: `인증번호는 ${authCode}입니다.`
+                //         }
+                //     ]
+                // });
+                // if(res.error) {
+                //     throw err(400);
+                // }
+                console.log(authCode);
+                next({ message: `인증코드 발송에 성공했습니다.` }); // 수정
             } catch (e) {
                 fb.ref(`/auth/sms/${phone}`).remove();
                 next(e);
@@ -795,7 +798,7 @@ const controller = {
             `, [user_no]);
 
             next({
-                bank: result[0].bank,
+                bank_code: result[0].bank_code,
                 account_number: result[0].account_number
             });
         } catch (e) {
@@ -805,7 +808,7 @@ const controller = {
     async editReturnAccount({ user, body }, { pool }, next) {
         try {
             const user_no = auth(user, 'user_no');
-            const bank = param(body, 'bank');
+            const bank_code = param(body, 'bank_code');
             const account_number = param(body, 'account_number');
 
             const connection = await pool.getConnection(async conn => await conn);
@@ -813,11 +816,11 @@ const controller = {
                 await connection.query(`
                     UPDATE
                     accounts
-                    SET bank = ?
+                    SET bank_code = ?
                     AND account_number = ?
                     WHERE user_no = ?
                     AND enabled = 1
-                `, [bank, account_number, user_no]);
+                `, [bank_code, account_number, user_no]);
                 await connection.commit();
 
                 next({ message: "환급계좌 수정이 완료되었습니다." });
@@ -1475,6 +1478,34 @@ const controller = {
                 pickup_created_datetime: dayjs(result[0].pickup_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 order_created_datetime: dayjs(result[0].order_created_datetime).format(`M월 D일(ddd) a h시 m분`),
             });            
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getUserInfo({ user }, { pool }, next) {
+        try {
+            const user_no = auth(user, 'user_no');
+            
+            const [ result ] = await pool.query(`
+                SELECT
+                u.name,
+                u.phone,
+                u.email,
+                u.birthday,
+                a.bank_name,
+                a.account_number
+                FROM users AS u
+                JOIN accounts AS a
+                ON u.no = a.user_no
+                WHERE u.no = ?
+                AND u.enabled = 1
+                AND a.enabled = 1
+                `, [ user_no ]);
+
+            next({
+                ...result[0],
+                birthday: dayjs(result[0].birthday).format(`YYYY년 MM월 DD일`)
+            });
         } catch (e) {
             next(e);
         }

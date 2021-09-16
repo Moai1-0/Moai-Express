@@ -6,5 +6,6 @@ const { checkUser } = require('../middlewares/auth');
 
 router.get('/ping', common.ping);
 router.post('/cs/opinion', checkUser, common.sendOpinion);
+router.get('/json/bank', common.getBankCode);
 
 module.exports = router;
