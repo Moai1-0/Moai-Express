@@ -1014,7 +1014,7 @@ const controller = {
                 COUNT(*) AS total_count
                 FROM reservations
                 WHERE user_no = ?
-                AND status = 'wait'
+                AND status = 'waiting'
                 AND enabled = 1;
 
                 SELECT
@@ -1047,7 +1047,7 @@ const controller = {
                     created_datetime
                     FROM reservations 
                     WHERE user_no = ?
-                    AND status = 'wait'
+                    AND status = 'waiting'
                     AND enabled = 1
                 ) AS r
                 JOIN (
@@ -1165,7 +1165,7 @@ const controller = {
                     FROM reservations 
                     WHERE no = ?
                     AND user_no = ?
-                    AND status = 'wait'
+                    AND status = 'waiting'
                     AND enabled = 1
                 ) AS r
                 JOIN (
