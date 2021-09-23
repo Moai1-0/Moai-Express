@@ -50,16 +50,7 @@ const controller = {
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
 
-            const [results] = await pool.query(`
-                SELECT
-                COUNT(*) AS total_count
-                FROM products AS p
-                JOIN shops AS s
-                ON p.shop_no = s.no
-                WHERE s.region_no = ?
-                AND s.enabled = 1
-                AND p.enabled = 1;
-
+            const [result] = await pool.query(`
                 SELECT
                 p.no AS product_no,
                 p.name AS product_name,
@@ -74,7 +65,7 @@ const controller = {
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
-                JOIN (
+                LEFT JOIN (
                     SELECT
                     product_no,
                     path
@@ -88,11 +79,10 @@ const controller = {
                 AND p.enabled = 1
                 ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC': sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
                 LIMIT ? OFFSET ?;
-            `, [region_no, region_no, count, offset]);
+            `, [region_no, count, offset]);
 
             next({
-                total_count: results[0][0].total_count,
-                products: results[1].map((product) => ({
+                products: result.map((product) => ({
                     ...product,
                     regular_price: product.regular_price.toLocaleString('ko-KR'),
                     discounted_price: product.discounted_price.toLocaleString('ko-KR'),
@@ -995,7 +985,7 @@ const controller = {
                 ) AS i
                 ON p.no = i.product_no
             `, [ reservation_no, user_no ]);
-
+            
             next({ 
                 ...result[0],
                 created_datetime: dayjs(result[0].created_datetime).format(`M월 D일(ddd) a h시 m분`),
