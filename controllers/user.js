@@ -130,7 +130,8 @@ const controller = {
                 p.discount_rate,
                 p.description,
                 p.expiry_datetime,
-                p.pickup_datetime
+                p.pickup_start_datetime,
+                p.pickup_end_datetime
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
@@ -151,7 +152,7 @@ const controller = {
             `, [product_no, product_no]);
 
             if (result.length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
-
+            
             next({
                 ...result[0],
                 discount_rate: parseFloat(result[0].discount_rate),
