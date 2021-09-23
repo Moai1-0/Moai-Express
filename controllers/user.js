@@ -163,8 +163,9 @@ const controller = {
                 discounted_price: result[0].discounted_price.toLocaleString('ko-KR'),
                 return_price: result[0].return_price.toLocaleString('ko-KR'),
                 raw_expiry_datetime: result[0].expiry_datetime,
-                expiry_datetime: dayjs(result[0].expiry_datetime).format(`YYYY-MM-DD(ddd) a h:m`),
-                pickup_datetime: dayjs(result[0].pickup_datetime).format(`YYYY-MM-DD(ddd) a h:m`),
+                expiry_datetime: dayjs(result[0].expiry_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
+                pickup_start_datetime: dayjs(result[0].pickup_start_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
+                pickup_end_datetime: dayjs(result[0].pickup_end_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
                 impending: dayjs(result[0].expiry_datetime).diff(dayjs(), 'hour') < 1 ? true : false
             });
         } catch (e) {
