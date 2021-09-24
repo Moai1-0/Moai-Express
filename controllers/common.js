@@ -1,5 +1,5 @@
 const err = require('http-errors');
-
+const bankCode = require('../config/bankCode.json');
 const { auth, param, parser, condition } = require('../utils/params');
 const tp = require('../utils/mailer');
 const { Users, User_sns_data, Shops, sequelize, Accounts } = require('../models');
@@ -40,6 +40,18 @@ const controller = {
             });
 
             next({ message: `등록되었습니다.` });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getBankCode(req, res, next) {
+        try {
+            next(bankCode.map((code) => (
+                {
+                    label: code.name,
+                    value: code.code
+                }
+            )));
         } catch (e) {
             next(e);
         }
