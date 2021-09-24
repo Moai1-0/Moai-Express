@@ -6,7 +6,7 @@ const { encodeToken } = require('../utils/token');
 const { S3 } = require('../utils/multer');
 const schedule = require("node-schedule");
 const tp = require('../utils/mailer');
-const { send } = require('../utils/solapi');
+const { send, sendConsumerResult } = require('../utils/solapi');
 require('dotenv').config();
 const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
@@ -15,6 +15,23 @@ const controller = {
     async ping(req, res, next) {
         try {
             next({ message: "ping" });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getShopInfo({ shop, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, 'shop_no');
+            const [result] = await pool.query(`
+                SELECT *
+                FROM shops
+                WHERE
+                no = ?
+            `, [shop_no]);
+            next({
+                shop_no: result[0].no,
+                shop_name: result[0].name
+            });
         } catch (e) {
             next(e);
         }
@@ -30,11 +47,11 @@ const controller = {
             const discounted_price = param(body, "discounted_price");
             const return_price = param(body, "return_price");
             const expiry_datetime = param(body, "expiry_datetime");
-            const pickup_datetime = param(body, "pickup_datetime");
-            const discount_rate = parseFloat(discounted_price / regular_price * 100).toFixed(2);
+            const pickup_start_datetime = param(body, "pickup_start_datetime");
+            const pickup_end_datetime = param(body, "pickup_end_datetime");
+            const discount_rate = 100 - parseFloat(discounted_price / regular_price * 100).toFixed(2);
             const is_bookmark = param(body, "is_bookmark");
             const connection = await pool.getConnection(async conn => await conn);
-
             try {
                 await connection.beginTransaction();
                 const [result] = await connection.query(`
@@ -48,10 +65,11 @@ const controller = {
                     discounted_price,
                     return_price,
                     expiry_datetime,
-                    pickup_datetime,
+                    pickup_start_datetime,
+                    pickup_end_datetime,
                     discount_rate
                     )
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
                     [
                         shop_no,
                         name,
@@ -62,7 +80,8 @@ const controller = {
                         discounted_price,
                         return_price,
                         expiry_datetime,
-                        pickup_datetime,
+                        pickup_start_datetime,
+                        pickup_end_datetime,
                         discount_rate
                     ]);
                 files.map(async (file, index) => {
@@ -78,10 +97,11 @@ const controller = {
                         INSERT INTO product_images (
                             product_no,
                             name,
-                            path
+                            path,
+                            sort
                         )
-                        VALUES(?,?,?)
-                    `, [result.insertId, name, `/${file_name}`]);
+                        VALUES(?,?,?,?)
+                    `, [result.insertId, name, `/${file_name}`, index + 1]);
 
                 });
 
@@ -112,7 +132,6 @@ const controller = {
     async getBookmarkProducts({ shop }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
-
             const [result] = await pool.query(`
                 SELECT 
                 a.no AS product_bookmark_no,
@@ -124,23 +143,29 @@ const controller = {
                 b.regular_price,
                 b.discounted_price,
                 b.expiry_datetime,
-                b.pickup_datetime,
-                b.return_price
+                b.pickup_start_datetime,
+                b.pickup_end_datetime,
+                b.return_price,
+                GROUP_CONCAT(path) AS "product_images"
                 FROM product_bookmark AS a
                 INNER JOIN products AS b
                 ON a.product_no = b.no
                 INNER JOIN shops AS c
                 ON a.shop_no = c.no
+                LEFT JOIN product_images AS d
+                ON b.no = d.product_no
                 WHERE a.shop_no = ?
-        
+                GROUP BY a.product_no
             `, [shop_no]);
 
             next(
                 result.map(product =>
                 ({
                     ...product,
-                    pickup_datetime: dayjs(product.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    pickup_start_datetime: dayjs(product.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                    pickup_end_datetime: dayjs(product.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
                     expiry_datetime: dayjs(product.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    product_images: (product.product_images) ? product.product_images.split(',').map(item => S3_URL + item) : []
                 }))
 
             );
@@ -167,23 +192,25 @@ const controller = {
             next(e);
         }
     },
-    async signin({ body }, { pool }, next) {
+    async signin({ body }, res, next) {
         try {
+            console.log(body);
             const id = param(body, "id");
             const password = param(body, 'password');
 
-            const [results] = await pool.query(`
+            const [results] = await res.pool.query(`
                     SELECT
                     *
                     FROM shops 
                     WHERE enabled = 1
                     AND id = ?;
                     `, [id]);
+            if (results.length < 1) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
             const accountValid = compareSync(password.toString(), results[0].password);
             if (results.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
 
             const token = encodeToken({ type: `shop_owner`, shop_no: results[0].no, id: results[0].id }, { expiresIn: '7d' });
-
+            res.cookie("accessToken", token, { httpOnly: true, maxAge: 1000 * 60 * 60 });
             next({ token });
         } catch (e) {
             next(e);
@@ -200,27 +227,30 @@ const controller = {
                     a.expected_quantity,
                     a.rest_quantity,
                     a.regular_price,
+                    a.return_price,
                     a.discounted_price,
-                    a.pickup_datetime,
+                    a.pickup_start_datetime,
+                    a.pickup_end_datetime,
                     a.expiry_datetime,
+                    a.actual_quantity,
                     b.sort,
                     GROUP_CONCAT(path) AS "product_images"
                     FROM products AS a
                     INNER JOIN product_images AS b
                     ON a.no = b.product_no
                     WHERE
-                    a.expiry_datetime > NOW()
+                    a.actual_quantity IS NULL
                     AND a.status = 'ongoing'
                     AND a.shop_no = ?
                     AND a.enabled = 1
                     GROUP BY b.product_no
                     `, [shop_no]);
-
             next(result.map(item => ({
                 ...item,
-                pickup_datetime: dayjs(item.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                pickup_start_datetime: dayjs(item.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                pickup_end_datetime: dayjs(item.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
                 expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
-                product_images: item.product_images.split(',').map(item => S3_URL + item)
+                product_images: item.product_images.split(',').map(item => S3_URL + item).filter(item => item[item.length - 1] === '1')
             })));
         } catch (e) {
             next(e);
@@ -230,6 +260,7 @@ const controller = {
         try {
             const shop_no = auth(shop, "shop_no");
             const product_no = param(query, "product_no");
+
             const [result] = await pool.query(`
                 SELECT 
                 a.no AS reservation_no,
@@ -251,7 +282,7 @@ const controller = {
                 WHERE
                 a.shop_no = ?
                 AND a.product_no = ?
-                AND a.status = "agreed"
+                AND a.status = "ongoing"
                 AND a.enabled = 1
                 ORDER BY a.created_datetime ASC;
 
@@ -260,32 +291,42 @@ const controller = {
                 a.name AS product_name,
                 a.expected_quantity,
                 a.rest_quantity,
+                a.actual_quantity,
                 a.regular_price,
+                a.return_price,
                 a.discounted_price,
-                a.discounted_rate,
-                a.pickup_datetime,
+                a.discount_rate,
+                a.pickup_start_datetime,
+                a.pickup_end_datetime,
                 a.expiry_datetime,
+                a.created_datetime,
                 b.sort,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM products AS a
                 INNER JOIN product_images AS b
                 ON a.no = b.product_no
                 WHERE
-                a.expiry_datetime > NOW()
-                AND a.shop_no = ?
+                a.shop_no = ?
                 AND a.no = ?
                 GROUP BY b.product_no
             `, [shop_no, product_no, shop_no, product_no]);
+            if (result[1].length < 1) throw err.NotFound('비정상적인 접근');
 
-            if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
+
             next({
                 product: {
                     ...result[1][0],
-                    pickup_datetime: dayjs(result[1][0].pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
-                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
-                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item)
+                    pickup_start_datetime: dayjs(result[1][0].pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                    pickup_end_datetime: dayjs(result[1][0].pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
+                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm"),
+                    created_datetime: dayjs(result[1][0].created_datetime).format("YYYY-MMDD HH:mm"),
+                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item),
+
                 },
-                orders: result[0]
+                orders: result[0].map(item => ({
+                    ...item,
+                    created_datetime: dayjs(item.created_datetime).format("YYYY-MM-DD HH:mm")
+                }))
             });
         } catch (e) {
             next(e);
@@ -297,20 +338,22 @@ const controller = {
 
             const [result] = await pool.query(`       
                 SELECT
-                a.no,
-                a.name,
+                a.no AS 'product_no',
+                a.name AS 'product_name',
                 a.expected_quantity,
                 a.actual_quantity,
                 a.rest_quantity,
                 a.regular_price,
+                a.return_price,
                 a.discounted_price,
-                a.pickup_datetime,
+                a.pickup_start_datetime,
+                a.pickup_end_datetime,
                 a.expiry_datetime,
+                a.actual_quantity,
                 b.sort,
                 c.pre_pickup_count,
                 GROUP_CONCAT(path) AS "product_images"
-                FROM products AS a
-                
+                FROM products AS a            
                 LEFT JOIN (SELECT 
                             product_no,
                             COUNT(*) as pre_pickup_count
@@ -322,6 +365,7 @@ const controller = {
                 ON a.no = b.product_no
                 WHERE
                 a.shop_no = ?
+                AND actual_quantity IS NOT NULL
                 AND a.expiry_datetime < NOW()
                 AND a.status = 'ongoing'
                 AND a.enabled = 1
@@ -331,7 +375,8 @@ const controller = {
 
             next(result.map(item => ({
                 ...item,
-                pickup_datetime: dayjs(item.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                pickup_start_datetime: dayjs(item.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                pickup_end_datetime: dayjs(item.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
                 expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
                 product_images: (item.product_images) ? item.product_images.split(',').map(item => S3_URL + item) : []
             })));
@@ -360,7 +405,8 @@ const controller = {
                 d.purchase_quantity AS pre_pickup_quantity,
                 e.purchase_quantity AS pickup_quantity,
                 f.purchase_quantity AS pre_return_quantity,
-                g.purchase_quantity AS return_quantity
+                g.purchase_quantity AS return_quantity,
+                d.pre_pickup_order_no
                 FROM 
                 reservations AS a
                 INNER JOIN products AS b
@@ -368,7 +414,8 @@ const controller = {
                 INNER JOIN users AS c
                 ON a.user_no = c.no 
                 LEFT JOIN 
-                (SELECT 
+                (SELECT
+                no AS pre_pickup_order_no,
                 reservation_no,
                 purchase_quantity,
                 status
@@ -401,7 +448,6 @@ const controller = {
                 ON a.no = g.reservation_no
                 WHERE
                 a.shop_no = ?
-                AND a.status = "wait"
                 AND a.product_no = ?
                 AND a.enabled = 1
                 ORDER BY a.created_datetime ASC;
@@ -409,12 +455,17 @@ const controller = {
                 SELECT
                 a.no AS product_no,
                 a.name AS product_name,
+                a.actual_quantity, 
                 a.expected_quantity,
                 a.rest_quantity,
                 a.regular_price,
+                a.return_price,
                 a.discounted_price,
-                a.pickup_datetime,
+                a.discount_rate,
+                a.pickup_start_datetime,
+                a.pickup_end_datetime,
                 a.expiry_datetime,
+                a.created_datetime,
                 b.sort,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM products AS a
@@ -422,19 +473,27 @@ const controller = {
                 ON a.no = b.product_no
                 WHERE
                 a.expiry_datetime < NOW()
+                AND a.actual_quantity IS NOT NULL
                 AND a.shop_no = ?
                 AND a.no = ?
                 GROUP BY b.product_no
             `, [shop_no, product_no, shop_no, product_no]);
             if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
+
             next({
                 product: {
                     ...result[1][0],
-                    pickup_datetime: dayjs(result[1][0].pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
-                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
-                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item)
+                    pickup_start_datetime: dayjs(result[1][0].pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                    pickup_end_datetime: dayjs(result[1][0].pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
+                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm"),
+                    created_datetime: dayjs(result[1][0].created_datetime).format("YYYY-MMDD HH:mm"),
+                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item),
+
                 },
-                reservations: result[0]
+                orders: result[0].map(item => ({
+                    ...item,
+                    created_datetime: dayjs(item.created_datetime).format("YYYY-MM-DD HH:mm")
+                }))
             });
         } catch (e) {
             next(e);
@@ -445,33 +504,54 @@ const controller = {
             const shop_no = auth(shop, "shop_no");
 
             const [result] = await pool.query(`
-                    SELECT
-                    a.no,
-                    a.name,
-                    a.expected_quantity,
-                    a.actual_quantity,
-                    a.rest_quantity,
-                    a.regular_price,
-                    a.discounted_price,
-                    a.pickup_datetime,
-                    a.expiry_datetime,
-                    b.sort,
-                    GROUP_CONCAT(path) AS "product_images"
-                    FROM products AS a
-                    INNER JOIN product_images AS b
-                    ON a.no = b.product_no
-                    WHERE
-                    a.shop_no = ?
-                    AND a.expiry_datetime < NOW()
-                    AND a.status = 'done'
-                    AND a.enabled = 1
-                    GROUP BY b.product_no
+            SELECT
+            a.no AS 'product_no',
+            a.name AS 'product_name',
+            a.expected_quantity,
+            a.actual_quantity,
+            a.rest_quantity,
+            a.regular_price,
+            a.return_price,
+            a.discounted_price,
+            a.pickup_start_datetime,
+            a.pickup_end_datetime,
+            a.expiry_datetime,
+            a.actual_quantity,
+            b.sort,
+            c.pickup_count,
+            d.return_count,
+            GROUP_CONCAT(path) AS "product_images"
+            FROM products AS a            
+            LEFT JOIN (SELECT 
+                        product_no,
+                        COUNT(*) as pickup_count
+                        FROM orders
+                        WHERE status = 'pickup'
+                        GROUP BY product_no) AS c
+            ON c.product_no = a.no
+            LEFT JOIN (SELECT 
+                product_no,
+                COUNT(*) as return_count
+                FROM orders
+                WHERE status = 'return'
+                GROUP BY product_no) AS d
+            ON d.product_no = a.no
+            LEFT JOIN product_images AS b
+            ON a.no = b.product_no
+            WHERE
+            a.shop_no = ?
+            AND actual_quantity IS NOT NULL
+            AND a.expiry_datetime < NOW()
+            AND a.status = 'done'
+            AND a.enabled = 1
+            GROUP BY a.no
                     `, [shop_no]);
 
             next(result.map(item => ({
                 ...item,
-                pickup_datetime: dayjs(item.pickup_datetime).format("YYYY-MM-DD HH:mm:ss"),
-                expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                pickup_start_datetime: dayjs(item.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                pickup_end_datetime: dayjs(item.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
+                expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm"),
                 product_images: item.product_images.split(',').map(item => S3_URL + item)
             })));
 
@@ -548,7 +628,6 @@ const controller = {
             const shop_no = auth(shop, "shop_no");
             const actual_quantity = param(body, 'actual_quantity');
             const product_no = param(body, "product_no");
-
             const [result] = await pool.query(`
                 SELECT *
                 FROM products
@@ -589,7 +668,7 @@ const controller = {
                     ON a.user_no = c.no
                     WHERE
                     a.product_no = ?
-                    AND a.status = "agreed"
+                    AND a.status = "ongoing"
                     AND a.enabled = 1
                     ORDER BY a.created_datetime ASC
 
@@ -607,14 +686,11 @@ const controller = {
                 `, [actual_quantity, product_no]);
 
                 // 예약 총 재고 보다 총 실재고가 많은경우;
-
-                if (reserved_quantity > actual_quantity) {
-                    for (let i = 0; i < result1.length; i++) {
-                        let temp_reserved_quantity = result1[i].total_purchase_quantity;
-                        // 싹 다 픽업 처리(실재고가 예약 주문보다 많은 경우)
-                        if (for_check_quantity >= temp_reserved_quantity) {
-                            console.log(result1[i].reservation_no, result1[i].user_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0);
-                            await connection.query(`
+                for (let i = 0; i < result1.length; i++) {
+                    let temp_reserved_quantity = result1[i].total_purchase_quantity;
+                    // 싹 다 픽업 처리(실재고가 예약 주문보다 많은 경우)
+                    if (for_check_quantity >= temp_reserved_quantity) {
+                        await connection.query(`
                             INSERT INTO orders (
                                 reservation_no,
                                 product_no,
@@ -628,18 +704,20 @@ const controller = {
                             VALUES
                             (?,?,?,?,?,?,?,"pre_pickup")
                             `, [
-                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0
-                            ]);
-
-                        }
-                        // 부분 픽업/환급 처리(실재고가 예약 주문보다 적은 경우)
-                        else if (for_check_quantity < temp_reserved_quantity) {
-                            const temp_return_quantity = temp_reserved_quantity - for_check_quantity;
-                            const temp_pickup_quantity = for_check_quantity;
-                            console.log(temp_return_quantity, temp_pickup_quantity);
-
-                            if (temp_pickup_quantity > 0) {
-                                await connection.query(`
+                            result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0
+                        ]);
+                        // await sendConsumerResult({
+                        //     pickup_number: temp_reserved_quantity,
+                        //     return_number: 0,
+                        //     to: result1[i].phone
+                        // });
+                    }
+                    // 부분 픽업/환급 처리(실재고가 예약 주문보다 적은 경우)
+                    else if (for_check_quantity < temp_reserved_quantity) {
+                        const temp_return_quantity = temp_reserved_quantity - for_check_quantity;
+                        const temp_pickup_quantity = for_check_quantity;
+                        if (temp_pickup_quantity > 0) {
+                            await connection.query(`
                                 INSERT INTO orders (
                                     reservation_no,
                                     product_no,
@@ -654,11 +732,16 @@ const controller = {
                                 (?,?,?,?,?,?,?,"pre_pickup"),
                                 (?,?,?,?,?,?,?,"pre_return")
                             `, [
-                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
-                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
-                                ]);
-                            } else if (temp_pickup_quantity == 0) {
-                                await connection.query(`
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
+                            ]);
+                            // await sendConsumerResult({
+                            //     pickup_number: temp_pickup_quantity,
+                            //     return_number: temp_return_quantity,
+                            //     to: result1[i].phone
+                            // });
+                        } else if (temp_pickup_quantity == 0) {
+                            await connection.query(`
                                 INSERT INTO orders (
                                     reservation_no,
                                     product_no,
@@ -672,62 +755,32 @@ const controller = {
                                 VALUES
                                 (?,?,?,?,?,?,?,"pre_return")
                             `, [
-                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity
-                                ]);
-                            }
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity
+                            ]);
+                            // await sendConsumerResult({
+                            //     pickup_number: 0,
+                            //     return_number: temp_reutrn_quantity,
+                            //     to: result1[i].phone
+                            // });
+                        }
 
-                            await connection.query(`
+                        await connection.query(`
                                 UPDATE point_accounts SET
                                 point = point + ?
                                 WHERE user_no = ?
                             `, [result1[i].return_price * temp_return_quantity, result1[i].user_no]);
-
-
-                        }
-                        for_check_quantity -= temp_reserved_quantity;
-                        await connection.query(`
+                    }
+                    await connection.query(`
                             UPDATE
                             reservations
-                            SET status = "wait"
+                            SET status = "waiting"
                             WHERE
                             no = ?
                             AND enabled = 1
                         `, [result1[i].reservation_no]);
+                    for_check_quantity -= temp_reserved_quantity;
 
-                    }
-                    // 예약 총 재고 보다 총 실재고가 많은경우 
-                } else if (reserved_quantity < actual_quantity) {
-                    for (let i = 0; i < result1.length; i++) {
-                        let temp_reserved_quantity = result1[i].total_purchase_quantity;
-                        await connection.query(`
-                            INSERT INTO orders (
-                                reservation_no,
-                                product_no,
-                                user_no,
-                                shop_no,
-                                purchase_quantity,
-                                purchase_price,
-                                return_price,
-                                status
-                            )
-                            VALUES
-                            (?,?,?,?,?,?,?,"pre_pickup")
-                            `, [
-                            result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0,
-                        ]);
-
-                        for_check_quantity -= temp_reserved_quantity;
-                        await connection.query(`
-                            UPDATE
-                            reservations
-                            SET status = "wait"
-                            WHERE
-                            no = ?
-                            AND enabled = 1
-                        `, [result1[i].reservation_no]);
-                    }
                 }
-
                 await connection.commit();
                 next({ message: "ping" });
             } catch (e) {
@@ -817,9 +870,6 @@ const controller = {
             next(e);
         }
     },
-
-
-
     // 임시 api
     async signup({ body }, { pool }, next) {
         try {

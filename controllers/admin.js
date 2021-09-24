@@ -97,7 +97,7 @@ const controller = {
     },
     async setReturn({ admin, body }, { pool }, next) {
         try {
-            const admin_no = auth(admin, "admin_no");
+            // const admin_no = auth(admin, "admin_no");
             const product_no = param(body, "product_no");
             const order_no = param(body, 'order_no');
             const reservation_no = param(body, 'reservation_no');
