@@ -548,7 +548,6 @@ const controller = {
             const shop_no = auth(shop, "shop_no");
             const actual_quantity = param(body, 'actual_quantity');
             const product_no = param(body, "product_no");
-
             const [result] = await pool.query(`
                 SELECT *
                 FROM products
@@ -589,7 +588,7 @@ const controller = {
                     ON a.user_no = c.no
                     WHERE
                     a.product_no = ?
-                    AND a.status = "agreed"
+                    AND a.status = "ongoing"
                     AND a.enabled = 1
                     ORDER BY a.created_datetime ASC
 
@@ -607,14 +606,11 @@ const controller = {
                 `, [actual_quantity, product_no]);
 
                 // 예약 총 재고 보다 총 실재고가 많은경우;
-
-                if (reserved_quantity > actual_quantity) {
-                    for (let i = 0; i < result1.length; i++) {
-                        let temp_reserved_quantity = result1[i].total_purchase_quantity;
-                        // 싹 다 픽업 처리(실재고가 예약 주문보다 많은 경우)
-                        if (for_check_quantity >= temp_reserved_quantity) {
-                            console.log(result1[i].reservation_no, result1[i].user_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0);
-                            await connection.query(`
+                for (let i = 0; i < result1.length; i++) {
+                    let temp_reserved_quantity = result1[i].total_purchase_quantity;
+                    // 싹 다 픽업 처리(실재고가 예약 주문보다 많은 경우)
+                    if (for_check_quantity >= temp_reserved_quantity) {
+                        await connection.query(`
                             INSERT INTO orders (
                                 reservation_no,
                                 product_no,
@@ -628,18 +624,20 @@ const controller = {
                             VALUES
                             (?,?,?,?,?,?,?,"pre_pickup")
                             `, [
-                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0
-                            ]);
-
-                        }
-                        // 부분 픽업/환급 처리(실재고가 예약 주문보다 적은 경우)
-                        else if (for_check_quantity < temp_reserved_quantity) {
-                            const temp_return_quantity = temp_reserved_quantity - for_check_quantity;
-                            const temp_pickup_quantity = for_check_quantity;
-                            console.log(temp_return_quantity, temp_pickup_quantity);
-
-                            if (temp_pickup_quantity > 0) {
-                                await connection.query(`
+                            result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0
+                        ]);
+                        // await sendConsumerResult({
+                        //     pickup_number: temp_reserved_quantity,
+                        //     return_number: 0,
+                        //     to: result1[i].phone
+                        // });
+                    }
+                    // 부분 픽업/환급 처리(실재고가 예약 주문보다 적은 경우)
+                    else if (for_check_quantity < temp_reserved_quantity) {
+                        const temp_return_quantity = temp_reserved_quantity - for_check_quantity;
+                        const temp_pickup_quantity = for_check_quantity;
+                        if (temp_pickup_quantity > 0) {
+                            await connection.query(`
                                 INSERT INTO orders (
                                     reservation_no,
                                     product_no,
@@ -654,11 +652,16 @@ const controller = {
                                 (?,?,?,?,?,?,?,"pre_pickup"),
                                 (?,?,?,?,?,?,?,"pre_return")
                             `, [
-                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
-                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
-                                ]);
-                            } else if (temp_pickup_quantity == 0) {
-                                await connection.query(`
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_pickup_quantity, result1[i].discounted_price * temp_pickup_quantity, 0,
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity,
+                            ]);
+                            // await sendConsumerResult({
+                            //     pickup_number: temp_pickup_quantity,
+                            //     return_number: temp_return_quantity,
+                            //     to: result1[i].phone
+                            // });
+                        } else if (temp_pickup_quantity == 0) {
+                            await connection.query(`
                                 INSERT INTO orders (
                                     reservation_no,
                                     product_no,
@@ -672,62 +675,32 @@ const controller = {
                                 VALUES
                                 (?,?,?,?,?,?,?,"pre_return")
                             `, [
-                                    result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity
-                                ]);
-                            }
+                                result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_return_quantity, 0, result1[i].return_price * temp_return_quantity
+                            ]);
+                            // await sendConsumerResult({
+                            //     pickup_number: 0,
+                            //     return_number: temp_reutrn_quantity,
+                            //     to: result1[i].phone
+                            // });
+                        }
 
-                            await connection.query(`
+                        await connection.query(`
                                 UPDATE point_accounts SET
                                 point = point + ?
                                 WHERE user_no = ?
                             `, [result1[i].return_price * temp_return_quantity, result1[i].user_no]);
-
-
-                        }
-                        for_check_quantity -= temp_reserved_quantity;
-                        await connection.query(`
+                    }
+                    await connection.query(`
                             UPDATE
                             reservations
-                            SET status = "wait"
+                            SET status = "waiting"
                             WHERE
                             no = ?
                             AND enabled = 1
                         `, [result1[i].reservation_no]);
+                    for_check_quantity -= temp_reserved_quantity;
 
-                    }
-                    // 예약 총 재고 보다 총 실재고가 많은경우 
-                } else if (reserved_quantity < actual_quantity) {
-                    for (let i = 0; i < result1.length; i++) {
-                        let temp_reserved_quantity = result1[i].total_purchase_quantity;
-                        await connection.query(`
-                            INSERT INTO orders (
-                                reservation_no,
-                                product_no,
-                                user_no,
-                                shop_no,
-                                purchase_quantity,
-                                purchase_price,
-                                return_price,
-                                status
-                            )
-                            VALUES
-                            (?,?,?,?,?,?,?,"pre_pickup")
-                            `, [
-                            result1[i].reservation_no, product_no, result1[i].user_no, shop_no, temp_reserved_quantity, result1[i].discounted_price * temp_reserved_quantity, 0,
-                        ]);
-
-                        for_check_quantity -= temp_reserved_quantity;
-                        await connection.query(`
-                            UPDATE
-                            reservations
-                            SET status = "wait"
-                            WHERE
-                            no = ?
-                            AND enabled = 1
-                        `, [result1[i].reservation_no]);
-                    }
                 }
-
                 await connection.commit();
                 next({ message: "ping" });
             } catch (e) {

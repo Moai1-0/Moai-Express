@@ -718,6 +718,9 @@ const controller = {
     },
     async getRemainingPoint({ user }, { pool }, next) {
         try {
+            /**
+             * 삭제 예정
+             */
             const user_no = auth(user, 'user_no');
 
             const [result] = await pool.query(`
@@ -833,14 +836,7 @@ const controller = {
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
 
-            const [ results ] = await pool.query(`
-                SELECT
-                COUNT(*) AS total_count
-                FROM reservations
-                WHERE user_no = ?
-                AND (status = 'ongoing' OR status = 'agreed' OR status = 'pre_canceled')
-                AND enabled = 1;
-
+            const [ result ] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
                 r.total_purchase_quantity,
@@ -849,57 +845,36 @@ const controller = {
                 r.created_datetime AS reservation_created_datetime,
                 p.no AS product_no,
                 p.name AS product_name,
+                p.expiry_datetime,
                 s.no AS shop_no,
                 s.name AS shop_name,
                 i.path
-                FROM (
-                    SELECT
-                    no,
-                    product_no,
-                    status,
-                    total_purchase_quantity,
-                    total_purchase_price,
-                    created_datetime
-                    FROM reservations 
-                    WHERE user_no = ?
-                    AND (status = 'ongoing' OR status = 'agreed' OR status = 'pre_canceled')
-                    AND enabled = 1
-                ) AS r
-                JOIN (
-                    SELECT
-                    no,
-                    name,
-                    shop_no,
-                    discounted_price,
-                    return_price
-                    FROM products
-                ) as p
+                FROM reservations AS r
+                JOIN products AS p
                 ON r.product_no = p.no
-                JOIN (
-                    SELECT
-                    no,
-                    name
-                    FROM shops
-                    WHERE enabled = 1
-                ) AS s
+                JOIN shops AS s
                 ON p.shop_no = s.no
                 LEFT JOIN (
                     SELECT
                     product_no,
                     path
                     FROM product_images
-                    WHERE enabled = 1
-                    AND sort = 1
+                    WHERE sort = 1
                 ) AS i
                 ON p.no = i.product_no
+                WHERE r.user_no = ?
+                AND (r.status = 'ongoing' OR r.status = 'waiting')
+                AND r.enabled = 1
+                ORDER BY r.created_datetime DESC
                 LIMIT ? OFFSET ?;
-                `, [ user_no, user_no, count, offset ]);
-            
+                `, [ user_no, count, offset ]);
+
             next({ 
-                total_count: results[0][0].total_count,
-                reservations: results[1].map((reservation) => ({
+                reservations: result.map((reservation) => ({
                     ...reservation,
-                    reservation_created_datetime: dayjs(reservation.reservation_created_datetime).format(`M월 D일(ddd) a h시 m분`),
+                    total_purchase_price: reservation.total_purchase_price.toLocaleString('ko-KR'),
+                    raw_expiry_datetime: reservation.expiry_datetime,
+                    reservation_created_datetime: dayjs(reservation.reservation_created_datetime).format(`M월 D일(ddd)`),
                 }))
             });
         } catch (e) {
@@ -918,8 +893,28 @@ const controller = {
                 r.total_purchase_quantity,
                 r.total_purchase_price,
                 r.created_datetime,
+                ppo.no AS pre_pickup_no,
+                ppo.purchase_quantity AS pre_pickup_purchase_quantity,
+                ppo.purchase_price AS pre_pickiup_purchase_price,
+                ppo.created_datetime AS pre_pickup_created_datetime,
+                po.no AS pickup_no,
+                po.purchase_quantity AS pickup_purchase_quantity,
+                po.purchase_price AS pickiup_purchase_price,
+                po.created_datetime AS pickup_created_datetime,
+                pro.no AS pre_return_purchase_no,
+                pro.purchase_quantity AS pre_return_purchase_quantity,
+                pro.purchase_price AS pre_return_purchase_price,
+                pro.return_price AS pre_return_price,
+                pro.created_datetime AS pre_return_created_datetime,
+                ro.no AS return_purchase_no,
+                ro.purchase_quantity AS return_purchase_quantity,
+                ro.purchase_price AS return_purchase_price,
+                ro.return_price AS return_price,
+                ro.created_datetime AS return_created_datetime,
                 p.no AS product_no,
                 p.name AS product_name,
+                p.pickup_start_datetime,
+                p.pickup_end_datetime,
                 s.no AS shop_no,
                 s.name AS shop_name,
                 s.tel,
@@ -933,62 +928,76 @@ const controller = {
                 s.opening_time,
                 s.closing_time,             
                 i.path
-                FROM (
-                    SELECT
-                    no,
-                    product_no,
-                    status,
-                    total_purchase_quantity,
-                    total_purchase_price,
-                    created_datetime
-                    FROM reservations 
-                    WHERE no = ?
-                    AND user_no = ?
-                    AND (status = 'ongoing' OR status = 'agreed' OR status = 'pre_canceled')
-                    AND enabled = 1
-                ) AS r
-                JOIN (
-                    SELECT
-                    no,
-                    name,
-                    shop_no,
-                    discounted_price,
-                    return_price
-                    FROM products
-                ) as p
+                FROM reservations AS r
+                JOIN products as p
                 ON r.product_no = p.no
-                JOIN (
-                    SELECT
-                    no,
-                    name,
-                    tel,
-                    road_address,
-                    road_detail_address,
-                    region_address,
-                    region_detail_address,
-                    latitude,
-                    longitude,
-                    shop_image,
-                    opening_time,
-                    closing_time
-                    FROM shops
-                    WHERE enabled = 1
-                ) AS s
+                JOIN shops AS s
                 ON p.shop_no = s.no
                 LEFT JOIN (
                     SELECT
                     product_no,
                     path
                     FROM product_images
-                    WHERE enabled = 1
-                    AND sort = 1
+                    WHERE sort = 1
                 ) AS i
                 ON p.no = i.product_no
+                LEFT JOIN (
+                    SELECT
+                    no,
+                    reservation_no,
+                    purchase_quantity,
+                    purchase_price,
+                    created_datetime
+                    FROM orders
+                    WHERE status = 'pre_pickup'
+                    AND enabled = 1
+                ) AS ppo
+                ON r.no = ppo.reservation_no
+                LEFT JOIN (
+                    SELECT
+                    no,
+                    reservation_no,
+                    purchase_quantity,
+                    purchase_price,
+                    created_datetime
+                    FROM orders
+                    WHERE status = 'pickup'
+                    AND enabled = 1
+                ) AS po
+                ON r.no = po.reservation_no
+                LEFT JOIN (
+                    SELECT
+                    no,
+                    reservation_no,
+                    purchase_quantity,
+                    purchase_price,
+                    return_price,
+                    created_datetime
+                    FROM orders
+                    WHERE status = 'pre_return'
+                    AND enabled = 1
+                ) AS pro
+                ON r.no = pro.reservation_no
+                LEFT JOIN (
+                    SELECT
+                    no,
+                    reservation_no,
+                    purchase_quantity,
+                    purchase_price,
+                    return_price,
+                    created_datetime
+                    FROM orders
+                    WHERE status = 'return'
+                ) AS ro
+                ON r.no = ro.reservation_no
+                WHERE r.no = ?
+                AND r.user_no = ?
+                AND r.enabled = 1
+                AND s.enabled = 1;
             `, [ reservation_no, user_no ]);
             
             next({ 
                 ...result[0],
-                created_datetime: dayjs(result[0].created_datetime).format(`M월 D일(ddd) a h시 m분`),
              });
         } catch (e) {
             next(e);
@@ -996,6 +1005,9 @@ const controller = {
     },
     async getOrderStatus({ user, query }, { pool }, next) {
         try {
+            /**
+             * 삭제 예정
+             */
             const user_no = auth(user, 'user_no');
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
@@ -1019,7 +1031,7 @@ const controller = {
                 po.purchase_quantity AS pickup_purchase_quantity,
                 po.purchase_price AS pickiup_purchase_price,
                 po.created_datetime AS pickup_created_datetime,
-                ro.no AS return_purchase_quantity,
+                ro.no AS return_purchase_no,
                 ro.purchase_quantity AS return_purchase_quantity,
                 ro.purchase_price AS return_purchase_price,
                 ro.return_price AS return_price,
@@ -1112,6 +1124,9 @@ const controller = {
     },
     async getOrderStatusDetail({ user, query }, { pool }, next) {
         try {
+            /**
+             * 삭제 예정
+             */
             const user_no = auth(user, 'user_no');
             const reservation_no = param(query, 'reservation_no');
 
