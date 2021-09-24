@@ -5,7 +5,7 @@ const { checkShop } = require('../middlewares/auth');
 const { s3upload } = require('../utils/multer');
 
 // router.get('/main', checkUser, board.mainPage);
-
+router.get('/owner/info', checkShop, shop.getShopInfo);
 router.post('/product'
     , checkShop
     , s3upload.array('product_images')
