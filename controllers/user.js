@@ -1000,6 +1000,8 @@ const controller = {
                 ORDER BY created_datetime DESC;
             `, [ reservation_no, user_no ]);
             
+            if (result.length < 1) throw err(404, `존재하지 않는 상품현황입니다.`);
+
             next({ 
                 ...result[0],
                 created_datetime: dayjs(result[0].created_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
