@@ -501,8 +501,11 @@ const controller = {
                         account_number
                     )
                     VALUES
-                    (?, ${bankCode[bank_code]}, ?, ?);
-                `, [user_no, bank_code, account_number]);
+                    (?, ?, ?, ?);
+                `, [user_no, 
+                    bankCode.filter(code => code["code"] === bank_code)[0].name, 
+                    bank_code, 
+                    account_number]);
                 await connection.query(`
                     INSERT INTO point_accounts (user_no)
                     VALUES (?);
