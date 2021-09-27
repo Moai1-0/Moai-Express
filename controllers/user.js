@@ -623,8 +623,8 @@ const controller = {
                     AND enabled = 1;
                 `, [email]);
 
-                // 에러
                 if (result.length < 1) throw err(400, `아이디가 일치하지 않습니다.`);
+
                 const isValid = compareSync(password.toString(), result[0].password);
                 if (!isValid) throw err(400, `비밀번호가 일치하지 않습니다.`);
 
@@ -681,12 +681,14 @@ const controller = {
 
                 const [result] = await connection.query(`
                     SELECT
+                    discounted_price,
                     rest_quantity
                     FROM products
                     WHERE no = ?
                     AND enabled = 1;
                 `, [product_no]);
 
+                if (result[0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
                 if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
 
                 await connection.query(`
