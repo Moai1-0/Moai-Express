@@ -624,8 +624,9 @@ const controller = {
                 `, [email]);
 
                 // 에러
+                if (result.length < 1) throw err(400, `아이디가 일치하지 않습니다.`);
                 const isValid = compareSync(password.toString(), result[0].password);
-                if (result.length < 1 || !isValid) throw err(400, `아이디 또는 비밀번호가 일치하지 않습니다.`);
+                if (!isValid) throw err(400, `비밀번호가 일치하지 않습니다.`);
 
                 const token = encodeToken({
                     type: `user`,
