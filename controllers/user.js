@@ -142,13 +142,13 @@ const controller = {
             `, [product_no, product_no]);
 
             if (result.length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
-            
+
             next({
                 ...result[0],
                 discount_rate: parseFloat(result[0].discount_rate),
-                paths: result[0].paths.split(',').map((path) => (
+                paths: result[0].paths ? (result[0].paths.split(',')).map((path) => (
                     BASE_URL + path
-                )) || [],
+                )) : [],
                 regular_price: result[0].regular_price.toLocaleString('ko-KR'),
                 discounted_price: result[0].discounted_price.toLocaleString('ko-KR'),
                 return_price: result[0].return_price.toLocaleString('ko-KR'),
