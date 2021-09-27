@@ -620,6 +620,7 @@ const controller = {
                     AND enabled = 1;
                 `, [email]);
 
+                // 에러
                 const isValid = compareSync(password.toString(), result[0].password);
                 if (result.length < 1 || !isValid) throw err(400, `아이디 또는 비밀번호가 일치하지 않습니다.`);
 
@@ -895,21 +896,17 @@ const controller = {
                 r.created_datetime,
                 ppo.no AS pre_pickup_no,
                 ppo.purchase_quantity AS pre_pickup_purchase_quantity,
-                ppo.purchase_price AS pre_pickiup_purchase_price,
                 ppo.created_datetime AS pre_pickup_created_datetime,
                 po.no AS pickup_no,
                 po.purchase_quantity AS pickup_purchase_quantity,
-                po.purchase_price AS pickiup_purchase_price,
                 po.created_datetime AS pickup_created_datetime,
-                pro.no AS pre_return_purchase_no,
+                pro.no AS pre_return_no,
                 pro.purchase_quantity AS pre_return_purchase_quantity,
-                pro.purchase_price AS pre_return_purchase_price,
-                pro.return_price AS pre_return_price,
+                pro.return_price AS pre_return_return_price,
                 pro.created_datetime AS pre_return_created_datetime,
-                ro.no AS return_purchase_no,
+                ro.no AS return_no,
                 ro.purchase_quantity AS return_purchase_quantity,
-                ro.purchase_price AS return_purchase_price,
-                ro.return_price AS return_price,
+                ro.return_price AS return_return_price,
                 ro.created_datetime AS return_created_datetime,
                 p.no AS product_no,
                 p.name AS product_name,
@@ -993,11 +990,15 @@ const controller = {
                 WHERE r.no = ?
                 AND r.user_no = ?
                 AND r.enabled = 1
-                AND s.enabled = 1;
+                AND s.enabled = 1
+                ORDER BY created_datetime DESC;
             `, [ reservation_no, user_no ]);
             
             next({ 
                 ...result[0],
+                created_datetime: dayjs(result[0].created_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
+                pickup_start_datetime: dayjs(result[0].pickup_start_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
+                pickup_end_datetime: dayjs(result[0].pickup_end_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
              });
         } catch (e) {
             next(e);
