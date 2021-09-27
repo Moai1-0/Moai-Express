@@ -142,13 +142,13 @@ const controller = {
             `, [product_no, product_no]);
 
             if (result.length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
-            
+
             next({
                 ...result[0],
                 discount_rate: parseFloat(result[0].discount_rate),
-                paths: result[0].paths.split(',').map((path) => (
+                paths: result[0].paths ? (result[0].paths.split(',')).map((path) => (
                     BASE_URL + path
-                )) || [],
+                )) : [],
                 regular_price: result[0].regular_price.toLocaleString('ko-KR'),
                 discounted_price: result[0].discounted_price.toLocaleString('ko-KR'),
                 return_price: result[0].return_price.toLocaleString('ko-KR'),
@@ -501,8 +501,11 @@ const controller = {
                         account_number
                     )
                     VALUES
-                    (?, ${bankCode[bank_code]}, ?, ?);
-                `, [user_no, bank_code, account_number]);
+                    (?, ?, ?, ?);
+                `, [user_no, 
+                    bankCode.filter(code => code["code"] === bank_code)[0].name, 
+                    bank_code, 
+                    account_number]);
                 await connection.query(`
                     INSERT INTO point_accounts (user_no)
                     VALUES (?);
@@ -620,9 +623,10 @@ const controller = {
                     AND enabled = 1;
                 `, [email]);
 
-                // 에러
+                if (result.length < 1) throw err(400, `아이디가 일치하지 않습니다.`);
+
                 const isValid = compareSync(password.toString(), result[0].password);
-                if (result.length < 1 || !isValid) throw err(400, `아이디 또는 비밀번호가 일치하지 않습니다.`);
+                if (!isValid) throw err(400, `비밀번호가 일치하지 않습니다.`);
 
                 const token = encodeToken({
                     type: `user`,
@@ -677,12 +681,14 @@ const controller = {
 
                 const [result] = await connection.query(`
                     SELECT
+                    discounted_price,
                     rest_quantity
                     FROM products
                     WHERE no = ?
                     AND enabled = 1;
                 `, [product_no]);
 
+                if (result[0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
                 if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
 
                 await connection.query(`
@@ -994,6 +1000,8 @@ const controller = {
                 ORDER BY created_datetime DESC;
             `, [ reservation_no, user_no ]);
             
+            if (result.length < 1) throw err(404, `존재하지 않는 상품현황입니다.`);
+
             next({ 
                 ...result[0],
                 created_datetime: dayjs(result[0].created_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
