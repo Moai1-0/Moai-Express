@@ -9,14 +9,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JungTag/Moai-Server.git"
+    "url": "git+https://github.com/Moai1-0/Moai-Server.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/JungTag/Moai-Server/issues"
+    "url": "https://github.com/Moai1-0/Moai-Server/issues"
   },
-  "homepage": "https://github.com/JungTag/Moai-Server#readme",
+  "homepage": "https://github.com/Moai1-0/Moai-Server#readme",
   "dependencies": {
     "aws-sdk": "^2.957.0",
     "axios": "^0.21.1",
