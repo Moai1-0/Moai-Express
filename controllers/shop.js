@@ -117,7 +117,7 @@ const controller = {
                     `, [shop_no, result.insertId]);
                 }
                 await connection.commit();
-                next({ message: "ping" });
+                next({ message: "업로드가 완료 되었습니다" });
             } catch (e) {
                 await connection.rollback();
                 next(e);
@@ -178,16 +178,18 @@ const controller = {
             const shop_no = auth(shop, "shop_no");
             const product_bookmark_no = param(body, 'product_bookmark_no');
 
-            const [result] = await pool.query(`
+            await pool.query(`
                 UPDATE product_bookmark
                 SET
                 enabled = 0,
                 removed_datetime = NOW()
                 WHERE
                 no = ?
-            `, [product_bookmark_no]);
+                AND shop_no = ?
 
-            next({ message: 'good' });
+            `, [product_bookmark_no, shop_no]);
+
+            next({ message: '즐겨찾기가 삭제 되었습니다' });
         } catch (e) {
             next(e);
         }
@@ -210,7 +212,7 @@ const controller = {
             if (results.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
 
             const token = encodeToken({ type: `shop_owner`, shop_no: results[0].no, id: results[0].id }, { expiresIn: '7d' });
-            res.cookie("accessToken", token, { httpOnly: true, maxAge: 1000 * 60 * 60 });
+            // res.cookie("accessToken", token, { httpOnly: true, maxAge: 1000 * 60 * 60 });
             next({ token });
         } catch (e) {
             next(e);
@@ -352,6 +354,7 @@ const controller = {
                 a.actual_quantity,
                 b.sort,
                 c.pre_pickup_count,
+                d.pre_return_count,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM products AS a            
                 LEFT JOIN (SELECT 
@@ -361,6 +364,13 @@ const controller = {
                             WHERE status = 'pre_pickup'
                             GROUP BY product_no) AS c
                 ON c.product_no = a.no
+                LEFT JOIN (SELECT 
+                            product_no,
+                            COUNT(*) as pre_return_count
+                            FROM orders
+                            WHERE status = 'pre_return'
+                            GROUP BY product_no) AS d
+                ON d.product_no = a.no
                 LEFT JOIN product_images AS b
                 ON a.no = b.product_no
                 WHERE
@@ -469,7 +479,7 @@ const controller = {
                 b.sort,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM products AS a
-                INNER JOIN product_images AS b
+                LEFT JOIN product_images AS b
                 ON a.no = b.product_no
                 WHERE
                 a.expiry_datetime < NOW()
@@ -479,6 +489,7 @@ const controller = {
                 GROUP BY b.product_no
             `, [shop_no, product_no, shop_no, product_no]);
             if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
+            // if (result[1].length >= 1) throw err.Unauthorized('비권한 테스트');
 
             next({
                 product: {
@@ -552,7 +563,7 @@ const controller = {
                 pickup_start_datetime: dayjs(item.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
                 pickup_end_datetime: dayjs(item.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
                 expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm"),
-                product_images: item.product_images.split(',').map(item => S3_URL + item)
+                product_images: (item.product_images) ? item.product_images.split(',').map(item => S3_URL + item) : []
             })));
 
 
@@ -837,7 +848,7 @@ const controller = {
                         reservations
                         WHERE
                         product_no = ?
-                        AND status = 'agreed'
+                        AND status = 'waiting'
                     `, [product_no]);
 
                     if (result2[0].count <= 0) {
