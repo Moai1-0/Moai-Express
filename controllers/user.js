@@ -19,6 +19,7 @@ const bankCode = require('../config/bankCode.json');
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
 const reservationLogApi = require("../db_api/reservation_log_api")
+const authenticationLogApi = require("../db_api/authentication_log_api.js");
 
 const PAGINATION_COUNT = 5;
 const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
@@ -547,6 +548,7 @@ const controller = {
         try {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
+            const connection = await pool.getConnection(async conn => await conn);
 
             const [ result ] = await pool.query(`
                 SELECT *
@@ -575,16 +577,46 @@ const controller = {
                 //     throw err(400);
                 // }
                 console.log(authCode);
+
+                // 데이터베이스 접근
+                try {
+                    await connection.beginTransaction();
+                    // 인증번호 로그 추가 
+                    await authenticationLogApi.postLogAuthentication(phone,
+                                                                    authCode,
+                                                                    connection);
+                    await connection.commit();
+                } catch (e) {
+                    connection.rollback();
+                } finally {
+                    connection.release();
+                }
+
+               
                 next({ message: `인증코드 발송에 성공했습니다.` }); // 수정
             } catch (e) {
                 fb.ref(`/auth/sms/${phone}`).remove();
                 next(e);
             }
+            
+            try {
+                await connection.beginTransaction();
+                // 인증번호 로그 추가 
+                await authenticationLogApi.postLogAuthentication(phone,
+                                                                 authCode);
+                await connection.commit();
+            } catch (e) {
+                connection.rollback();
+            } finally {
+                connection.release();
+            }
+
         } catch (e) {
             next(e);
         }
     },
     async checkAuthCode({ body }, { pool }, next) {
+
         try {
             const phone = param(body, 'phone'); // key
             const authCode = param(body, 'authCode'); // value
