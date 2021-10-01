@@ -18,6 +18,7 @@ const productLogModels = {
         }
     },
 
+    // 상품 수량 변화에 대한 로그 처리 함수
     postLogProductQuantityModels: async function(productNo,
                                                  expectedQuantity,
                                                  actualQuantity,

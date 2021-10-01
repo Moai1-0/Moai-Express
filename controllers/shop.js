@@ -125,6 +125,13 @@ const controller = {
                                                             "ongoing",
                                                             connection);
 
+                // db 수량변화에 따른 로그 처리
+                productLogModels.postLogProductQuantityModels(result.insertId,
+                                                              expected_quantity,
+                                                              null,
+                                                              rest_quantity,
+                                                              connection);
+
                 await connection.commit();
                 next({ message: "업로드가 완료 되었습니다" });
             } catch (e) {
@@ -799,8 +806,19 @@ const controller = {
                             AND enabled = 1
                         `, [result1[i].reservation_no]);
                     for_check_quantity -= temp_reserved_quantity;
-
                 }
+
+                // 실재고수량 기입에 따른 로그 처리
+
+                console.log(product_no);
+                console.log(JSON.stringify(result1));
+
+                productLogModels.postLogProductQuantityModels(product_no,
+                    result1[0].expected_quantity,
+                    actual_quantity,
+                    result1[0].rest_quantity,
+                    connection);
+
                 await connection.commit();
                 next({ message: "ping" });
             } catch (e) {
