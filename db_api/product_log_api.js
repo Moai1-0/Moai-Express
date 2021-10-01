@@ -17,6 +17,32 @@ const productLogModels = {
             throw e;
         }
     },
+
+    postLogProductQuantityModels: async function(productNo,
+                                                 expectedQuantity,
+                                                 actualQuantity,
+                                                 restQuantity,
+                                                 connection) {
+        try {
+            const [result] = await connection.query(`
+                INSERT INTO log_products_quantity(
+                    product_no,
+                    expected_quantity,
+                    actual_quantity,
+                    rest_quantity
+                )
+                VALUES(?,?,?,?)`,
+                    [
+                        productNo,
+                        expectedQuantity,
+                        actualQuantity,
+                        restQuantity,
+                    ]
+                );
+        } catch (e) {
+            throw e;
+        }
+    }
 };
 
 
