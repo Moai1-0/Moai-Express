@@ -17,5 +17,7 @@ const productLogModels = {
             throw e;
         }
     },
-}
+};
 
+
+module.exports = productLogModels;

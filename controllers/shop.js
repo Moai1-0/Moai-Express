@@ -11,6 +11,9 @@ require('dotenv').config();
 const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
 
+// db-api 상수
+const productLogModels = require("../db_api/product_log_api");
+
 const controller = {
     async ping(req, res, next) {
         try {
@@ -116,6 +119,12 @@ const controller = {
 
                     `, [shop_no, result.insertId]);
                 }
+                
+                // db 상태변화에 따른 로그 처리
+                productLogModels.postLogProductStatusModels(result.insertId,
+                                                            "ongoing",
+                                                            connection);
+
                 await connection.commit();
                 next({ message: "업로드가 완료 되었습니다" });
             } catch (e) {
@@ -858,6 +867,11 @@ const controller = {
                             WHERE
                             no = ?
                         `, [product_no]);
+
+                        // 프로덕트완 관련된 거래 모두 완료시 "done"으로 상태 변경
+                        productLogModels.postLogProductStatusModels(product_no,
+                                                                    "done",
+                                                                     connection);
                     }
                 }
                 // for (let i = 0; i < result1.length; i++) {
