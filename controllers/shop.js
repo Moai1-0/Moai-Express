@@ -12,7 +12,9 @@ const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
 
 // db-api 상수
-const productLogModels = require("../db_api/product_log_api");
+const productLogAPI = require("../db_api/product_log_api");
+const reservationLogApi = require("../db_api/reservation_log_api")
+
 
 const controller = {
     async ping(req, res, next) {
@@ -121,12 +123,12 @@ const controller = {
                 }
                 
                 // db 상태변화에 따른 로그 처리
-                productLogModels.postLogProductStatusModels(result.insertId,
+                await productLogAPI.postLogProductStatusModels(result.insertId,
                                                             "ongoing",
                                                             connection);
 
                 // db 수량변화에 따른 로그 처리
-                productLogModels.postLogProductQuantityModels(result.insertId,
+                await productLogAPI.postLogProductQuantityModels(result.insertId,
                                                               expected_quantity,
                                                               null,
                                                               rest_quantity,
@@ -806,18 +808,19 @@ const controller = {
                             AND enabled = 1
                         `, [result1[i].reservation_no]);
                     for_check_quantity -= temp_reserved_quantity;
+                    
+                    // 예약 상태 변경 사항 로그 반영
+                    await reservationLogApi.postLogReservationStatusModels(result1[i].reservation_no,
+                                                                     "waiting",
+                                                                     connection);
                 }
 
                 // 실재고수량 기입에 따른 로그 처리
-
-                console.log(product_no);
-                console.log(JSON.stringify(result1));
-
-                productLogModels.postLogProductQuantityModels(product_no,
-                    result1[0].expected_quantity,
-                    actual_quantity,
-                    result1[0].rest_quantity,
-                    connection);
+                await productLogAPI.postLogProductQuantityModels(product_no,
+                                                                 result1[0].expected_quantity,
+                                                                 actual_quantity,
+                                                                 result1[0].rest_quantity,
+                                                                 connection);
 
                 await connection.commit();
                 next({ message: "ping" });
@@ -867,6 +870,11 @@ const controller = {
                         WHERE
                         no = ?
                     `, [reservation_no]);
+                    
+                    // 예약 상태 변경 사항 로그 반영
+                    await reservationLogApi.postLogReservationStatusModels(reservation_no,
+                                                                            "done",
+                                                                             connection);
 
                     const [result2] = await connection.query(`
                         SELECT
@@ -887,7 +895,7 @@ const controller = {
                         `, [product_no]);
 
                         // 프로덕트완 관련된 거래 모두 완료시 "done"으로 상태 변경
-                        productLogModels.postLogProductStatusModels(product_no,
+                        await productLogAPI.postLogProductStatusModels(product_no,
                                                                     "done",
                                                                      connection);
                     }
