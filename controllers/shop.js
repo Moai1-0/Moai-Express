@@ -12,7 +12,7 @@ const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
 
 // db-api 상수
-const productLogModels = require("../db_api/product_log_api");
+const productLogAPI = require("../db_api/product_log_api");
 
 const controller = {
     async ping(req, res, next) {
@@ -121,12 +121,12 @@ const controller = {
                 }
                 
                 // db 상태변화에 따른 로그 처리
-                productLogModels.postLogProductStatusModels(result.insertId,
+                productLogAPI.postLogProductStatusModels(result.insertId,
                                                             "ongoing",
                                                             connection);
 
                 // db 수량변화에 따른 로그 처리
-                productLogModels.postLogProductQuantityModels(result.insertId,
+                productLogAPI.postLogProductQuantityModels(result.insertId,
                                                               expected_quantity,
                                                               null,
                                                               rest_quantity,
@@ -813,7 +813,7 @@ const controller = {
                 console.log(product_no);
                 console.log(JSON.stringify(result1));
 
-                productLogModels.postLogProductQuantityModels(product_no,
+                productLogAPI.postLogProductQuantityModels(product_no,
                     result1[0].expected_quantity,
                     actual_quantity,
                     result1[0].rest_quantity,
@@ -887,7 +887,7 @@ const controller = {
                         `, [product_no]);
 
                         // 프로덕트완 관련된 거래 모두 완료시 "done"으로 상태 변경
-                        productLogModels.postLogProductStatusModels(product_no,
+                        productLogAPI.postLogProductStatusModels(product_no,
                                                                     "done",
                                                                      connection);
                     }

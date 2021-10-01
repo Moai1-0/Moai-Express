@@ -1,4 +1,4 @@
-const productLogModels = {
+const productLogAPI = {
     // 상품 상태 변화에 대한 로그 처리 함수
     postLogProductStatusModels: async function(productNo, status, connection) {
         try {
@@ -47,4 +47,4 @@ const productLogModels = {
 };
 
 
-module.exports = productLogModels;
+module.exports = productLogAPI;

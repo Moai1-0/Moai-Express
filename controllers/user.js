@@ -17,7 +17,7 @@ const { scheduleJob } = require('../utils/scheduler');
 const bankCode = require('../config/bankCode.json');
 
 // db-api 상수
-const productLogModels = require("../db_api/product_log_api");
+const productLogAPI = require("../db_api/product_log_api");
 
 const PAGINATION_COUNT = 5;
 const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
@@ -716,7 +716,7 @@ const controller = {
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
 
-                productLogModels.postLogProductQuantityModels(product_no,
+                productLogAPI.postLogProductQuantityModels(product_no,
                                                               result[0].expected_quantity,
                                                               null,
                                                               result[0].rest_quantity - total_purchase_quantity,
