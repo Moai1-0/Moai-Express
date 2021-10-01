@@ -19,6 +19,8 @@ const bankCode = require('../config/bankCode.json');
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
 const reservationLogApi = require("../db_api/reservation_log_api")
+const authenticationLogApi = require("../db_api/authentication_log_api.js");
+const { ConnectionRefusedError } = require('sequelize/types');
 
 const PAGINATION_COUNT = 5;
 const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
@@ -547,6 +549,7 @@ const controller = {
         try {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
+            const connection = await pool.getConnection(async conn => await conn);
 
             const [ result ] = await pool.query(`
                 SELECT *
@@ -575,11 +578,14 @@ const controller = {
                 //     throw err(400);
                 // }
                 console.log(authCode);
+
+               
                 next({ message: `인증코드 발송에 성공했습니다.` }); // 수정
             } catch (e) {
                 fb.ref(`/auth/sms/${phone}`).remove();
                 next(e);
             }
+
         } catch (e) {
             next(e);
         }
