@@ -18,6 +18,7 @@ const bankCode = require('../config/bankCode.json');
 
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
+const reservationLogApi = require("../db_api/reservation_log_api")
 
 const PAGINATION_COUNT = 5;
 const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
@@ -696,7 +697,7 @@ const controller = {
                 if (result[0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
                 if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
 
-                await connection.query(`
+                const [reserveResult] = await connection.query(`
                     INSERT INTO reservations (
                         user_no,
                         shop_no,
@@ -715,13 +716,17 @@ const controller = {
                     WHERE no = ?
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
-
-                productLogAPI.postLogProductQuantityModels(product_no,
+                
+                // 상품 수량 변경 사항 로그 반영
+                await productLogAPI.postLogProductQuantityModels(product_no,
                                                               result[0].expected_quantity,
                                                               null,
                                                               result[0].rest_quantity - total_purchase_quantity,
                                                               connection);
-                                                             
+                // 예약 상태 변경 사항 로그 반영
+                await reservationLogApi.postLogReservationStatusModels(reserveResult.insertId,
+                                                                 "ongoing",
+                                                                 connection);
 
 
 
