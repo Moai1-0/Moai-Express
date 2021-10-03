@@ -3,9 +3,10 @@ const pointLogAPI = {
                                              depositedPoint,
                                              remainingPoint,
                                              connection) {
+        
         try {
             const [result] = await connection.query(`
-                INSERT INTO log_return_point(
+                INSERT INTO log_point(
                     point_account_no,
                     deposited_point,
                     remaining_point

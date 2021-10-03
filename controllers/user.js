@@ -20,6 +20,7 @@ const bankCode = require('../config/bankCode.json');
 const productLogAPI = require("../db_api/product_log_api");
 const reservationLogApi = require("../db_api/reservation_log_api")
 const authenticationLogApi = require("../db_api/authentication_log_api.js");
+const pointLogApi = require("../db_api/point_log_api");
 
 const PAGINATION_COUNT = 5;
 const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
@@ -512,10 +513,15 @@ const controller = {
                     bankCode.filter(code => code["code"] === bank_code)[0].name, 
                     bank_code, 
                     account_number]);
-                await connection.query(`
+                const [pointResult] = await connection.query(`
                     INSERT INTO point_accounts (user_no)
                     VALUES (?);
                 `, [user_no]);
+
+                await pointLogApi.postLogPointModels(pointResult.insertId,
+                                                    0,
+                                                    0,
+                                                    connection);
 
                 await connection.commit();
                 next({ message: "가입되었습니다." });
@@ -825,6 +831,13 @@ const controller = {
                     )
                     VALUES (?, ?);
                 `, [return_price, user_no, user_no, return_price]);
+
+
+                
+                await pointLogApi.postLogPointModels(result1[0].no,
+                                                    -(parseInt(return_price)),
+                                                    result1[0].point -(parseInt(return_price)),
+                                                    connection);
                 await connection.commit();
 
                 next({ message: "환급신청이 완료되었습니다." });

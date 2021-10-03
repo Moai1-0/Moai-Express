@@ -13,7 +13,8 @@ const { connect } = require('../routes/shop');
 
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
-const reservationLogApi = require("../db_api/reservation_log_api")
+const reservationLogApi = require("../db_api/reservation_log_api");
+const pointLogApi = require("../db_api/point_log_api");
 
 
 const controller = {
@@ -798,6 +799,19 @@ const controller = {
                                 point = point + ?
                                 WHERE user_no = ?
                             `, [result1[i].return_price * temp_return_quantity, result1[i].user_no]);
+
+                        const [pointResult] = await pool.query(`
+                            SELECT point
+                            FROM point_accounts
+                            WHERE user_no = ?
+                            AND enabled = 1;
+                            `, [result1[i].user_no]);
+                        
+                        await pointLogApi.postLogPointModels(result1[i].user_no,
+                                                            result1[i].return_price * temp_return_quantity,
+                                                            pointResult[0].point + (result1[i].return_price * temp_return_quantity),
+                                                            connection)
+
                     }
                     await connection.query(`
                             UPDATE
