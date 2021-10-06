@@ -554,15 +554,16 @@ const controller = {
         try {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
-            const connection = await pool.getConnection(async conn => await conn);
-
+            
             const [ result ] = await pool.query(`
-                SELECT *
-                FROM users
-                WHERE phone = ?
-                AND enabled = 1
+            SELECT *
+            FROM users
+            WHERE phone = ?
+            AND enabled = 1
             `, [phone]);
             if (result.length > 0) throw err(409, '중복된 전화번호입니다.');
+
+            const connection = await pool.getConnection(async conn => await conn);
             try {
                 fb.ref(`/auth/sms/${phone}`).set({
                     authCode
@@ -798,7 +799,7 @@ const controller = {
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
-                const [result] = await pool.query(`
+                await connection.query(`
                     UPDATE
                     point_accounts
                     SET point = point - ?
