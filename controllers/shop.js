@@ -137,7 +137,7 @@ const controller = {
                 a.no AS product_bookmark_no,
                 a.shop_no,
                 a.product_no,
-                b.name,
+                b.name AS product_name,
                 b.description,
                 b.expected_quantity,
                 b.regular_price,
@@ -146,6 +146,7 @@ const controller = {
                 b.pickup_start_datetime,
                 b.pickup_end_datetime,
                 b.return_price,
+                a.created_datetime,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM product_bookmark AS a
                 INNER JOIN products AS b
@@ -155,6 +156,7 @@ const controller = {
                 LEFT JOIN product_images AS d
                 ON b.no = d.product_no
                 WHERE a.shop_no = ?
+                AND a.enabled = 1
                 GROUP BY a.product_no
             `, [shop_no]);
 
@@ -165,6 +167,7 @@ const controller = {
                     pickup_start_datetime: dayjs(product.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
                     pickup_end_datetime: dayjs(product.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
                     expiry_datetime: dayjs(product.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                    created_datetime: dayjs(product.created_datetime).format("YYYY.MM.DD"),
                     product_images: (product.product_images) ? product.product_images.split(',').map(item => S3_URL + item) : []
                 }))
 
