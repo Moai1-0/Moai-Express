@@ -6,14 +6,18 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 require('dayjs/locale/ko');
 dayjs.locale('ko');
+
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const check = require('../utils/check');
 const fb = require('../utils/firebase');
+const mailer = require('../utils/mailer');
 const { generateRandomCode } = require('../utils/random');
-const { send } = require('../utils/solapi');
+const { send, sendKakaoMessage } = require('../utils/solapi');
 const { scheduleJob } = require('../utils/scheduler');
+
+const template = require('../config/template');
 const bankCode = require('../config/bankCode.json');
 
 // db-api 상수
@@ -1586,61 +1590,114 @@ const controller = {
             const phone_number = param(body, 'phone_number');
             const total_purchase_quantity = param(body, 'total_purchase_quantity');
             const total_purchase_price = param(body, 'total_purchase_price');
-            console.log(body);
-            console.log(phone_number);
+            
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
+                let user_mvp_no;
 
-                const [result] = await connection.query(`
+                const [result1] = await connection.query(`
+                    SELECT *
+                    FROM user_mvp
+                    WHERE phone_number = ?
+                    AND enabled = 1;
+
                     SELECT
-                    rest_quantity
+                    name AS product_name,
+                    discounted_price,
+                    expected_quantity,
+                    rest_quantity,
+                    expiry_datetime,
+                    expiry_datetime - NOW() AS is_expired
                     FROM products
                     WHERE no = ?
                     AND enabled = 1;
-                `, [product_no]);
+                `, [phone_number, product_no]);
+                
+                if (result1[1][0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
+                if (result1[1][0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
+                if (result1[1][0].is_expired < 0) throw err(400, `마감된 상품입니다.`);
 
-                // if (result[0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
-                if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
+                if (result1[0].length < 1) {
+                    const [result] = await connection.query(`
+                        INSERT INTO user_mvp (
+                            phone_number
+                        )
+                        VALUES (?);
+                    `, [phone_number]);
+                    user_mvp_no = result.insertId;
+                } else {
+                    user_mvp_no = result1[0][0].no;
+                }
 
                 await connection.query(`
                         INSERT INTO reservations (
                             shop_no,
+                            user_mvp_no,
                             product_no,
                             depositor_name,
                             bank,
                             account_number,
-                            phone_number,
                             total_purchase_quantity,
                             total_purchase_price
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                     `, [
                     shop_no,
+                    user_mvp_no,
                     product_no,
                     depositor_name,
                     bank,
                     account_number,
-                    phone_number,
                     total_purchase_quantity,
                     total_purchase_price
                 ]);
-                // 문자(고객) + 이메일(우리)
-                // await connection.query(`
-                //     UPDATE
-                //     products
-                //     SET rest_quantity = rest_quantity - ?
-                //     WHERE no = ?
-                //     AND enabled = 1;
-                // `, [total_purchase_quantity, product_no]);
+
+                await connection.query(`
+                    UPDATE
+                    products
+                    SET rest_quantity = rest_quantity - ?
+                    WHERE no = ?
+                    AND enabled = 1;
+                `, [total_purchase_quantity, product_no]);
 
                 await connection.commit();
-                next({ message: "예약되었습니다." });
             } catch (e) {
                 await connection.rollback();
                 next(e);
             } finally {
                 connection.release();
+            }
+
+            try {
+                const kakaoResult = await sendKakaoMessage({
+                    to: `${phone_number}`,
+                    from: `01043987759`,
+                    text: template.completeReservationApplication({
+                        depositor_name,
+                        total_purchase_price,
+                    }),
+                    type: `CTA`,
+                    kakaoOptions: {
+                        "pfId": require('../config').solapi.pfId
+                    }
+                });
+                
+                if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+
+                const mailResult = await mailer.sendMailToAdmins({ 
+                    subject: '예약 알림',
+                    text: template.completeReservationApplication({
+                        depositor_name,
+                        total_purchase_price,
+                    })
+                });
+
+                if (mailResult === null) throw err(400, '메일 전송에 실패했습니다.');
+
+                next({ message: "예약되었습니다." });
+            } catch (e) {
+                next(e);
             }
         } catch (e) {
             next(e);
