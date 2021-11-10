@@ -55,6 +55,7 @@ module.exports = {
     },
     solapi: {
         apiKey: process.env.SOLAPI_API_KEY,
-        apiSecret: process.env.SOLAPI_API_SECRET_KEY
+        apiSecret: process.env.SOLAPI_API_SECRET_KEY,
+        pfId: process.env.SOLAPI_PF_ID,
     }
 };
