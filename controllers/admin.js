@@ -228,6 +228,7 @@ const controller = {
         }
     },
     async getUser({ admin, query }, { pool }, next) {
+
         try {
             // const admin_no = auth(admin, "admin_no");
             const user_no = param(query, 'user_no');
@@ -367,6 +368,63 @@ const controller = {
         }
     },
 
+    async mvpGetPreConfirmedReservation(req, { pool }, next) {
+        console.log(1123);
+        try {
+           const [preConfirmedResult] = await pool.query(`
+                SELECT r.no, r.total_purchase_price, r.total_purchase_quantity, p.name, u.phone_number
+                FROM reservations as r
+                LEFT OUTER JOIN user_mvp as u
+                ON r.user_mvp_no = u.no
+                LEFT OUTER JOIN products as p
+                ON r.product_no = p.no
+                WHERE r.status = 'pre_confirmed'
+           `);
+           next(preConfirmedResult); 
+        } catch (e) {
+            next(e);
+        }
+    },
+
+    async mvpPatchPreConfirmedReservation({ body }, {pool}, next) {
+        console.log(body);
+        const rNo = param(body, 'no');
+        console.log(rNo);
+
+        try {
+            console.log(pool)
+            const connection = await pool.getConnection(async conn => await conn);
+            console.log(connection)
+            console.log("---------------------");
+            try {
+                await connection.beginTransaction();
+                console.log("beginTransaction")
+                const [patchResult] = await connection.query(`
+                    UPDATE reservations as r
+                    SET r.status = 'ongoing'
+                    WHERE r.no = ?
+                `, rNo);
+                console.log("finishquery")
+
+                await connection.commit();
+                console.log("commit")
+                next({ message: "이체 확인 상태로 변경되었습니다." })
+            } catch(e) {
+                await connection.rollback();
+                next(e)
+            } finally {
+                connection.release();
+            }
+        } catch(e) {
+            next(e)
+        }
+        
+    }
+
 };
 
 module.exports = controller;
+
+/*
+최종재고입력해야 하는 상품 리스트업
+*/
