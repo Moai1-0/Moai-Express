@@ -16,6 +16,11 @@ const { send } = require('../utils/solapi');
 const { scheduleJob } = require('../utils/scheduler');
 const bankCode = require('../config/bankCode.json');
 
+// db-api 상수
+const productLogAPI = require("../db_api/product_log_api");
+const reservationLogApi = require("../db_api/reservation_log_api")
+const authenticationLogApi = require("../db_api/authentication_log_api.js");
+const pointLogApi = require("../db_api/point_log_api");
 
 const PAGINATION_COUNT = 5;
 const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
@@ -109,7 +114,9 @@ const controller = {
                 s.name AS shop_name,
                 s.tel,
                 s.road_address,
+                s.road_detail_address,
                 s.region_address,
+                s.region_detail_address,
                 s.latitude,
                 s.longitude,
                 p.expected_quantity,
@@ -507,10 +514,15 @@ const controller = {
                     bankCode.filter(code => code["code"] === bank_code)[0].name,
                     bank_code,
                     account_number]);
-                await connection.query(`
+                const [pointResult] = await connection.query(`
                     INSERT INTO point_accounts (user_no)
                     VALUES (?);
                 `, [user_no]);
+
+                await pointLogApi.postLogPointModels(pointResult.insertId,
+                                                    0,
+                                                    0,
+                                                    connection);
 
                 await connection.commit();
                 next({ message: "가입되었습니다." });
@@ -543,14 +555,16 @@ const controller = {
         try {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
-
-            const [result] = await pool.query(`
-                SELECT *
-                FROM users
-                WHERE phone = ?
-                AND enabled = 1
+ 
+            const [ result ] = await pool.query(`
+            SELECT *
+            FROM users
+            WHERE phone = ?
+            AND enabled = 1
             `, [phone]);
             if (result.length > 0) throw err(409, '중복된 전화번호입니다.');
+
+            const connection = await pool.getConnection(async conn => await conn);
             try {
                 fb.ref(`/auth/sms/${phone}`).set({
                     authCode
@@ -571,16 +585,46 @@ const controller = {
                 //     throw err(400);
                 // }
                 console.log(authCode);
+
+                // 데이터베이스 접근
+                try {
+                    await connection.beginTransaction();
+                    // 인증번호 로그 추가 
+                    await authenticationLogApi.postLogAuthentication(phone,
+                                                                    authCode,
+                                                                    connection);
+                    await connection.commit();
+                } catch (e) {
+                    connection.rollback();
+                } finally {
+                    connection.release();
+                }
+
+               
                 next({ message: `인증코드 발송에 성공했습니다.` }); // 수정
             } catch (e) {
                 fb.ref(`/auth/sms/${phone}`).remove();
                 next(e);
             }
+            
+            try {
+                await connection.beginTransaction();
+                // 인증번호 로그 추가 
+                await authenticationLogApi.postLogAuthentication(phone,
+                                                                 authCode);
+                await connection.commit();
+            } catch (e) {
+                connection.rollback();
+            } finally {
+                connection.release();
+            }
+
         } catch (e) {
             next(e);
         }
     },
     async checkAuthCode({ body }, { pool }, next) {
+
         try {
             const phone = param(body, 'phone'); // key
             const authCode = param(body, 'authCode'); // value
@@ -683,6 +727,7 @@ const controller = {
                 const [result] = await connection.query(`
                     SELECT
                     discounted_price,
+                    expected_quantity,
                     rest_quantity
                     FROM products
                     WHERE no = ?
@@ -692,7 +737,7 @@ const controller = {
                 if (result[0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
                 if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
 
-                await connection.query(`
+                const [reserveResult] = await connection.query(`
                     INSERT INTO reservations (
                         user_no,
                         shop_no,
@@ -711,6 +756,19 @@ const controller = {
                     WHERE no = ?
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
+                
+                // 상품 수량 변경 사항 로그 반영
+                await productLogAPI.postLogProductQuantityModels(product_no,
+                                                              result[0].expected_quantity,
+                                                              null,
+                                                              result[0].rest_quantity - total_purchase_quantity,
+                                                              connection);
+                // 예약 상태 변경 사항 로그 반영
+                await reservationLogApi.postLogReservationStatusModels(reserveResult.insertId,
+                                                                 "ongoing",
+                                                                 connection);
+
+
 
                 await connection.commit();
                 next({ message: "예약되었습니다." });
@@ -720,26 +778,6 @@ const controller = {
             } finally {
                 connection.release();
             }
-        } catch (e) {
-            next(e);
-        }
-    },
-    async getRemainingPoint({ user }, { pool }, next) {
-        try {
-            /**
-             * 삭제 예정
-             */
-            const user_no = auth(user, 'user_no');
-
-            const [result] = await pool.query(`
-                SELECT
-                *
-                FROM point_accounts
-                WHERE user_no = ?
-                AND enabled = 1;
-            `, [user_no]);
-
-            next({ point: result[0].point });
         } catch (e) {
             next(e);
         }
@@ -762,7 +800,7 @@ const controller = {
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
-                const [result] = await pool.query(`
+                await connection.query(`
                     UPDATE
                     point_accounts
                     SET point = point - ?
@@ -775,6 +813,13 @@ const controller = {
                     )
                     VALUES (?, ?);
                 `, [return_price, user_no, user_no, return_price]);
+
+
+                
+                await pointLogApi.postLogPointModels(result1[0].no,
+                                                    -(parseInt(return_price)),
+                                                    result1[0].point -(parseInt(return_price)),
+                                                    connection);
                 await connection.commit();
 
                 next({ message: "환급신청이 완료되었습니다." });
@@ -1013,6 +1058,7 @@ const controller = {
             next(e);
         }
     },
+
     async getOrderStatus({ user, query }, { pool }, next) {
         try {
             /**
@@ -1510,15 +1556,18 @@ const controller = {
                 u.email,
                 u.birthday,
                 a.bank_name,
-                a.account_number
+                a.account_number,
+                p.point
                 FROM users AS u
                 JOIN accounts AS a
                 ON u.no = a.user_no
+                JOIN point_accounts AS p
+                ON u.no = p.user_no
                 WHERE u.no = ?
                 AND u.enabled = 1
                 AND a.enabled = 1
-                `, [user_no]);
-
+                AND p.enabled = 1
+                `, [ user_no ]);
             next({
                 ...result[0],
                 birthday: dayjs(result[0].birthday).format(`YYYY년 MM월 DD일`)

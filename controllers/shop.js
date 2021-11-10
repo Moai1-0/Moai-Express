@@ -11,6 +11,12 @@ require('dotenv').config();
 const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
 
+// db-api 상수
+const productLogAPI = require("../db_api/product_log_api");
+const reservationLogApi = require("../db_api/reservation_log_api");
+const pointLogApi = require("../db_api/point_log_api");
+
+
 const controller = {
     async ping(req, res, next) {
         try {
@@ -116,8 +122,21 @@ const controller = {
 
                     `, [shop_no, result.insertId]);
                 }
+                
+                // db 상태변화에 따른 로그 처리
+                await productLogAPI.postLogProductStatusModels(result.insertId,
+                                                            "ongoing",
+                                                            connection);
+
+                // db 수량변화에 따른 로그 처리
+                await productLogAPI.postLogProductQuantityModels(result.insertId,
+                                                              expected_quantity,
+                                                              null,
+                                                              rest_quantity,
+                                                              connection);
+
                 await connection.commit();
-                next({ message: "ping" });
+                next({ message: "업로드가 완료 되었습니다" });
             } catch (e) {
                 await connection.rollback();
                 next(e);
@@ -178,16 +197,18 @@ const controller = {
             const shop_no = auth(shop, "shop_no");
             const product_bookmark_no = param(body, 'product_bookmark_no');
 
-            const [result] = await pool.query(`
+            await pool.query(`
                 UPDATE product_bookmark
                 SET
                 enabled = 0,
                 removed_datetime = NOW()
                 WHERE
                 no = ?
-            `, [product_bookmark_no]);
+                AND shop_no = ?
 
-            next({ message: 'good' });
+            `, [product_bookmark_no, shop_no]);
+
+            next({ message: '즐겨찾기가 삭제 되었습니다' });
         } catch (e) {
             next(e);
         }
@@ -210,7 +231,7 @@ const controller = {
             if (results.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
 
             const token = encodeToken({ type: `shop_owner`, shop_no: results[0].no, id: results[0].id }, { expiresIn: '7d' });
-            res.cookie("accessToken", token, { httpOnly: true, maxAge: 1000 * 60 * 60 });
+            // res.cookie("accessToken", token, { httpOnly: true, maxAge: 1000 * 60 * 60 });
             next({ token });
         } catch (e) {
             next(e);
@@ -352,6 +373,7 @@ const controller = {
                 a.actual_quantity,
                 b.sort,
                 c.pre_pickup_count,
+                d.pre_return_count,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM products AS a            
                 LEFT JOIN (SELECT 
@@ -361,6 +383,13 @@ const controller = {
                             WHERE status = 'pre_pickup'
                             GROUP BY product_no) AS c
                 ON c.product_no = a.no
+                LEFT JOIN (SELECT 
+                            product_no,
+                            COUNT(*) as pre_return_count
+                            FROM orders
+                            WHERE status = 'pre_return'
+                            GROUP BY product_no) AS d
+                ON d.product_no = a.no
                 LEFT JOIN product_images AS b
                 ON a.no = b.product_no
                 WHERE
@@ -469,7 +498,7 @@ const controller = {
                 b.sort,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM products AS a
-                INNER JOIN product_images AS b
+                LEFT JOIN product_images AS b
                 ON a.no = b.product_no
                 WHERE
                 a.expiry_datetime < NOW()
@@ -479,6 +508,7 @@ const controller = {
                 GROUP BY b.product_no
             `, [shop_no, product_no, shop_no, product_no]);
             if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
+            // if (result[1].length >= 1) throw err.Unauthorized('비권한 테스트');
 
             next({
                 product: {
@@ -552,7 +582,7 @@ const controller = {
                 pickup_start_datetime: dayjs(item.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
                 pickup_end_datetime: dayjs(item.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
                 expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm"),
-                product_images: item.product_images.split(',').map(item => S3_URL + item)
+                product_images: (item.product_images) ? item.product_images.split(',').map(item => S3_URL + item) : []
             })));
 
 
@@ -769,6 +799,19 @@ const controller = {
                                 point = point + ?
                                 WHERE user_no = ?
                             `, [result1[i].return_price * temp_return_quantity, result1[i].user_no]);
+
+                        const [pointResult] = await pool.query(`
+                            SELECT point
+                            FROM point_accounts
+                            WHERE user_no = ?
+                            AND enabled = 1;
+                            `, [result1[i].user_no]);
+                        
+                        await pointLogApi.postLogPointModels(result1[i].user_no,
+                                                            result1[i].return_price * temp_return_quantity,
+                                                            pointResult[0].point + (result1[i].return_price * temp_return_quantity),
+                                                            connection)
+
                     }
                     await connection.query(`
                             UPDATE
@@ -779,8 +822,20 @@ const controller = {
                             AND enabled = 1
                         `, [result1[i].reservation_no]);
                     for_check_quantity -= temp_reserved_quantity;
-
+                    
+                    // 예약 상태 변경 사항 로그 반영
+                    await reservationLogApi.postLogReservationStatusModels(result1[i].reservation_no,
+                                                                     "waiting",
+                                                                     connection);
                 }
+
+                // 실재고수량 기입에 따른 로그 처리
+                await productLogAPI.postLogProductQuantityModels(product_no,
+                                                                 result1[0].expected_quantity,
+                                                                 actual_quantity,
+                                                                 result1[0].rest_quantity,
+                                                                 connection);
+
                 await connection.commit();
                 next({ message: "ping" });
             } catch (e) {
@@ -829,6 +884,11 @@ const controller = {
                         WHERE
                         no = ?
                     `, [reservation_no]);
+                    
+                    // 예약 상태 변경 사항 로그 반영
+                    await reservationLogApi.postLogReservationStatusModels(reservation_no,
+                                                                            "done",
+                                                                             connection);
 
                     const [result2] = await connection.query(`
                         SELECT
@@ -837,7 +897,7 @@ const controller = {
                         reservations
                         WHERE
                         product_no = ?
-                        AND status = 'agreed'
+                        AND status = 'waiting'
                     `, [product_no]);
 
                     if (result2[0].count <= 0) {
@@ -847,6 +907,11 @@ const controller = {
                             WHERE
                             no = ?
                         `, [product_no]);
+
+                        // 프로덕트완 관련된 거래 모두 완료시 "done"으로 상태 변경
+                        await productLogAPI.postLogProductStatusModels(product_no,
+                                                                    "done",
+                                                                     connection);
                     }
                 }
                 // for (let i = 0; i < result1.length; i++) {
