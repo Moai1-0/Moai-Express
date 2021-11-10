@@ -11,7 +11,8 @@ router.post('/signup/email/check', user.checkEmail); // 회원가입 - 이메일
 router.post('/signup/sms', user.sendAuthCode); // 회원가입 - 인증코드 발송
 router.post('/signup/sms/check', user.checkAuthCode); // 회원가입 - 인증코드 검증
 router.post('/signin', user.signin); // 로그인
-router.post('/reserve', checkUser, user.reserveProduct); // 상품 예약
+router.post('/reserve', user.reserveProductMVP); // 상품 예약
+// router.post('/reserve', checkUser, user.reserveProduct); // 상품 예약
 router.get('/status/reservation', checkUser, user.getReservationStatus); // 주문현황 - 예약현황 리스트 조회
 router.get('/status/reservation/detail', checkUser, user.getReservationStatusDetail); // 주문현황 - 예약현황 상세 조회
 router.get('/history/purchase', checkUser, user.getPurchaseHistory); // 거래내역 리스트 조회

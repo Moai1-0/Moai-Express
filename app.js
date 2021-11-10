@@ -22,7 +22,7 @@ app.use(helmet());
 app.use(cors({ credentials: true, origin: true }));
 
 // Custom Middlewares
-app.use(sql(config.mysql),);
+app.use(sql(config.mysql));
 
 // Passport
 const passport = require('passport');
