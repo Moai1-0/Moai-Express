@@ -17,4 +17,6 @@ router.get('/shops/detail', admin.getShop); // 가게 리스트 조회
 router.get('/mvp/preconfirmed', admin.mvpGetPreConfirmedReservation); // 이체 승인 전 예약 리스트 불러오기
 router.patch('/mvp/preconfirmed', admin.mvpPatchPreConfirmedReservation); // 예약 이체 승인 후 상태로 변경
 
+router.get('/mvp/actualQuantity', admin.mvpGetNoActualQuantityProduct); // 실제 재고 수량 없는 프로덕트 리스트
+router.patch('/mvp/actualQuantity', admin.mvpPatchActualQuantityProduct); // 실제 수량 입력
 module.exports = router;
