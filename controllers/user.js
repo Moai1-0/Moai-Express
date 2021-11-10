@@ -2,7 +2,7 @@ const err = require('http-errors');
 const dayjs = require('dayjs');
 const timezone = require('dayjs/plugin/timezone');
 const utc = require('dayjs/plugin/utc');
-dayjs.extend(utc)
+dayjs.extend(utc);
 dayjs.extend(timezone);
 require('dayjs/locale/ko');
 dayjs.locale('ko');
@@ -11,7 +11,7 @@ const { encodeToken } = require('../utils/token');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const check = require('../utils/check');
 const fb = require('../utils/firebase');
-const { generateRandomCode } = require('../utils/random')
+const { generateRandomCode } = require('../utils/random');
 const { send } = require('../utils/solapi');
 const { scheduleJob } = require('../utils/scheduler');
 const bankCode = require('../config/bankCode.json');
@@ -77,7 +77,7 @@ const controller = {
                 WHERE s.region_no = ?
                 AND s.enabled = 1
                 AND p.enabled = 1
-                ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC': sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
+                ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC' : sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [region_no, count, offset]);
 
@@ -86,7 +86,7 @@ const controller = {
                     ...product,
                     regular_price: product.regular_price.toLocaleString('ko-KR'),
                     discounted_price: product.discounted_price.toLocaleString('ko-KR'),
-                    return_price: product.return_price.toLocaleString('ko-KR'), 
+                    return_price: product.return_price.toLocaleString('ko-KR'),
                     path: BASE_URL + product.path,
                     discount_rate: parseFloat(product.discount_rate),
                     raw_expiry_datetime: product.expiry_datetime,
@@ -121,7 +121,8 @@ const controller = {
                 p.description,
                 p.expiry_datetime,
                 p.pickup_start_datetime,
-                p.pickup_end_datetime
+                p.pickup_end_datetime,
+                p.google_link
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
@@ -502,9 +503,9 @@ const controller = {
                     )
                     VALUES
                     (?, ?, ?, ?);
-                `, [user_no, 
-                    bankCode.filter(code => code["code"] === bank_code)[0].name, 
-                    bank_code, 
+                `, [user_no,
+                    bankCode.filter(code => code["code"] === bank_code)[0].name,
+                    bank_code,
                     account_number]);
                 await connection.query(`
                     INSERT INTO point_accounts (user_no)
@@ -526,7 +527,7 @@ const controller = {
     async checkEmail({ body }, { pool }, next) {
         try {
             const email = param(body, 'email');
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT *
                 FROM users
                 WHERE email = ?
@@ -543,7 +544,7 @@ const controller = {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT *
                 FROM users
                 WHERE phone = ?
@@ -583,7 +584,7 @@ const controller = {
         try {
             const phone = param(body, 'phone'); // key
             const authCode = param(body, 'authCode'); // value
-            
+
             try {
                 const snapshot = await fb.ref(`/auth/sms/${phone}`).get();
                 if (snapshot.exists()) {
@@ -592,13 +593,13 @@ const controller = {
                         fb.ref(`/auth/sms/${phone}`).remove();
                         next({ message: `인증에 성공하셨습니다.` });
                     } else {
-                        throw err(400, '인증번호를 다시 요청해주세요.');    
+                        throw err(400, '인증번호를 다시 요청해주세요.');
                     }
                 } else {
                     throw err(400, '인증번호를 다시 요청해주세요.');
                 }
             } catch (e) {
-                next(e);                
+                next(e);
             }
         } catch (e) {
             next(e);
@@ -843,7 +844,7 @@ const controller = {
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
                 r.total_purchase_quantity,
@@ -874,9 +875,9 @@ const controller = {
                 AND r.enabled = 1
                 ORDER BY r.created_datetime DESC
                 LIMIT ? OFFSET ?;
-                `, [ user_no, count, offset ]);
+                `, [user_no, count, offset]);
 
-            next({ 
+            next({
                 reservations: result.map((reservation) => ({
                     ...reservation,
                     total_purchase_price: reservation.total_purchase_price.toLocaleString('ko-KR'),
@@ -893,7 +894,7 @@ const controller = {
             const user_no = auth(user, 'user_no');
             const reservation_no = param(query, 'reservation_no');
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
                 r.status AS reservation_status,
@@ -998,16 +999,16 @@ const controller = {
                 AND r.enabled = 1
                 AND s.enabled = 1
                 ORDER BY created_datetime DESC;
-            `, [ reservation_no, user_no ]);
-            
+            `, [reservation_no, user_no]);
+
             if (result.length < 1) throw err(404, `존재하지 않는 상품현황입니다.`);
 
-            next({ 
+            next({
                 ...result[0],
                 created_datetime: dayjs(result[0].created_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
                 pickup_start_datetime: dayjs(result[0].pickup_start_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
                 pickup_end_datetime: dayjs(result[0].pickup_end_datetime).format(`YYYY-MM-DD(ddd) a h:mm`),
-             });
+            });
         } catch (e) {
             next(e);
         }
@@ -1022,7 +1023,7 @@ const controller = {
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
 
-            const [ results ] = await pool.query(`
+            const [results] = await pool.query(`
                 SELECT
                 COUNT(*) AS total_count
                 FROM reservations
@@ -1116,9 +1117,9 @@ const controller = {
                 ) AS ro
                 ON r.no = ro.reservation_no
                 LIMIT ? OFFSET ?;
-                `, [ user_no, user_no, count, offset ]);
-            
-            next({ 
+                `, [user_no, user_no, count, offset]);
+
+            next({
                 total_count: results[0][0].total_count,
                 reservations: results[1].map((reservation) => ({
                     ...reservation,
@@ -1129,7 +1130,7 @@ const controller = {
             });
         } catch (e) {
             next(e);
-        }        
+        }
     },
     async getOrderStatusDetail({ user, query }, { pool }, next) {
         try {
@@ -1139,7 +1140,7 @@ const controller = {
             const user_no = auth(user, 'user_no');
             const reservation_no = param(query, 'reservation_no');
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
                 r.status AS reservation_status,
@@ -1246,14 +1247,14 @@ const controller = {
                     AND enabled = 1
                 ) AS ro
                 ON r.no = ro.reservation_no
-                `, [ reservation_no, user_no ]);
+                `, [reservation_no, user_no]);
 
-            next({ 
+            next({
                 ...result[0],
                 reservation_created_datetime: dayjs(result[0].reservation_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 pickup_created_datetime: dayjs(result[0].pickup_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 order_created_datetime: dayjs(result[0].order_created_datetime).format(`M월 D일(ddd) a h시 m분`),
-            });            
+            });
         } catch (e) {
             next(e);
         }
@@ -1264,8 +1265,8 @@ const controller = {
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
-            
-            const [ results ] = await pool.query(`
+
+            const [results] = await pool.query(`
                 SELECT
                 COUNT (*) AS total_count
                 FROM reservations
@@ -1359,9 +1360,9 @@ const controller = {
                 ) AS ro
                 ON r.no = ro.reservation_no
                 LIMIT ? OFFSET ?;
-                `, [ user_no, user_no, count, offset ]);
-            
-            next({ 
+                `, [user_no, user_no, count, offset]);
+
+            next({
                 total_count: results[0][0].total_count,
                 histories: results[1].map((history) => ({
                     ...history,
@@ -1379,7 +1380,7 @@ const controller = {
             const user_no = auth(user, 'user_no');
             const reservation_no = param(query, 'reservation_no');
 
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
                 r.status AS reservation_status,
@@ -1486,14 +1487,14 @@ const controller = {
                     AND enabled = 1
                 ) AS ro
                 ON r.no = ro.reservation_no;
-                `, [ reservation_no, user_no ]);
+                `, [reservation_no, user_no]);
 
-            next({ 
+            next({
                 ...result[0],
                 reservation_created_datetime: dayjs(result[0].reservation_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 pickup_created_datetime: dayjs(result[0].pickup_created_datetime).format(`M월 D일(ddd) a h시 m분`),
                 order_created_datetime: dayjs(result[0].order_created_datetime).format(`M월 D일(ddd) a h시 m분`),
-            });            
+            });
         } catch (e) {
             next(e);
         }
@@ -1501,8 +1502,8 @@ const controller = {
     async getUserInfo({ user }, { pool }, next) {
         try {
             const user_no = auth(user, 'user_no');
-            
-            const [ result ] = await pool.query(`
+
+            const [result] = await pool.query(`
                 SELECT
                 u.name,
                 u.phone,
@@ -1516,7 +1517,7 @@ const controller = {
                 WHERE u.no = ?
                 AND u.enabled = 1
                 AND a.enabled = 1
-                `, [ user_no ]);
+                `, [user_no]);
 
             next({
                 ...result[0],
@@ -1526,6 +1527,77 @@ const controller = {
             next(e);
         }
     },
-}
+    async reserveProductMVP({ body }, { pool }, next) {
+        try {
+            const shop_no = param(body, 'shop_no');
+            const product_no = param(body, 'product_no');
+            const depositor_name = param(body, 'depositor_name');
+            const bank = param(body, 'bank');
+            const account_number = param(body, 'account_number');
+            const phone_number = param(body, 'phone_number');
+            const total_purchase_quantity = param(body, 'total_purchase_quantity');
+            const total_purchase_price = param(body, 'total_purchase_price');
+            console.log(body);
+            console.log(phone_number);
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+
+                const [result] = await connection.query(`
+                    SELECT
+                    rest_quantity
+                    FROM products
+                    WHERE no = ?
+                    AND enabled = 1;
+                `, [product_no]);
+
+                // if (result[0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
+                if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
+
+                await connection.query(`
+                        INSERT INTO reservations (
+                            shop_no,
+                            product_no,
+                            depositor_name,
+                            bank,
+                            account_number,
+                            phone_number,
+                            total_purchase_quantity,
+                            total_purchase_price
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                    `, [
+                    shop_no,
+                    product_no,
+                    depositor_name,
+                    bank,
+                    account_number,
+                    phone_number,
+                    total_purchase_quantity,
+                    total_purchase_price
+                ]);
+                // 문자(고객) + 이메일(우리)
+                // await connection.query(`
+                //     UPDATE
+                //     products
+                //     SET rest_quantity = rest_quantity - ?
+                //     WHERE no = ?
+                //     AND enabled = 1;
+                // `, [total_purchase_quantity, product_no]);
+
+                await connection.commit();
+                next({ message: "예약되었습니다." });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+        } catch (e) {
+            next(e);
+        }
+    },
+
+};
 
 module.exports = controller;
