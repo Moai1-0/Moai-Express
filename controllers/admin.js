@@ -398,7 +398,24 @@ const controller = {
                     WHERE r.no = ?
                 `, rNo);
 
+                const [temp] = await connection.query(`
+                            SELECT r.depositor_name, u.phone_number, p.name, r.total_purchase_quantity ,p.expiry_datetime
+                            FROM reservations as r
+                            JOIN products as p
+                            ON p.no = r.product_no
+                            JOIN user_mvp as u
+                            ON r.user_mvp_no = u.no
+                            WHERE r.no = ?
+                        `, [rNo])
+                let tempMessage = temp[0]
+                tempMessage["expiry_datetime"] = dayjs(tempMessage["expiry_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`)
+
+                console.log(JSON.stringify(tempMessage));
+
+
                 await connection.commit();
+
+
                 next({ message: "이체 확인 상태로 변경되었습니다." })
             } catch(e) {
                 await connection.rollback();
@@ -432,6 +449,8 @@ const controller = {
         const expectedQuantity = param(body, 'expected_quantity');
         const productId = param(body, "product_id");
         
+        let pickupArray = []
+        let returnArray = []
 
         try {
             if (expectedQuantity < actualQuantity) {
@@ -453,33 +472,26 @@ const controller = {
                         SET p.status = 'done'
                         WHERE p.no = ?
                     `, [productId])
-                    next("예약이 없어 상품 판매가 종료되었습니다.")
+                    next({message: "예약이 없어 상품 판매가 종료되었습니다."})
                 } 
                 
                 let count = actualQuantity
-
-                /**
-                 * 수령 시
-                 * phone_number
-                 * depositor_name
-                 * product_name
-                 * total_purchase_quantity
-                 * pickup_start_datetime
-                 * pickup_end_datetime
-                 */
-
-                /**
-                 * 환급 시
-                 * phone_number
-                 * depositor_name
-                 * product_name
-                 * total_purchase_quantity
-                 * total_return_price (환급금 총액)
-                 */
+            
                 for (const r of reservationResult) {
                     let totalPurchased = r.total_purchase_quantity
                     const productPrice = r.total_purchase_price / totalPurchased
 
+                    const [temp] = await connection.query(`
+                            SELECT r.depositor_name, u.phone_number, p.name, p.pickup_start_datetime, p.pickup_end_datetime
+                            FROM reservations as r
+                            JOIN products as p
+                            ON p.no = r.product_no
+                            JOIN user_mvp as u
+                            ON r.user_mvp_no = u.no
+                            WHERE r.no = ?
+                        `, [r.no])
+                    temp[0]["pickup_start_datetime"] = dayjs(temp[0]["pickup_start_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`)
+                    temp[0]["pickup_end_datetime"] = dayjs(temp[0]["pickup_end_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`)
 
                     if (totalPurchased <= count) {
                         count -= totalPurchased
@@ -505,6 +517,11 @@ const controller = {
                             0,
                             "pre_pickup"
                         ]);
+                        let tempPickup = JSON.parse(JSON.stringify(temp[0]))
+                            tempPickup["total_purchased"] = totalPurchased
+                            tempPickup["total_price"] = r.total_purchase_price
+                        pickupArray.push(tempPickup)
+
                     } else {
                         if (count > 0) {
                             await connection.query( `
@@ -529,10 +546,15 @@ const controller = {
                             0,
                             "pre_pickup"
                         ]);
+                            let tempPickup = JSON.parse(JSON.stringify(temp[0]))
+                            tempPickup["total_purchased"] = count
+                            tempPickup["total_price"] = count * productPrice
+                            pickupArray.push(tempPickup)
                             totalPurchased -= count
                             count = 0
                         }
                         if (totalPurchased > 0 ) {
+                            console.log(1)
                             await connection.query( `
                             INSERT INTO orders (
                                 reservation_no,
@@ -555,7 +577,16 @@ const controller = {
                             totalPurchased*productPrice,
                             "pre_return"
                         ]);
+                            let tempReturn = JSON.parse(JSON.stringify(temp[0]))
+                            tempReturn["total_purchased"] = totalPurchased
+                            tempReturn["total_price"] = totalPurchased*productPrice
+
+                            returnArray.push(tempReturn)
+
                         }
+
+                        console.log(returnArray)
+                        console.log(pickupArray)
                     }
                     await connection.query(`
                         UPDATE reservations as r
@@ -569,7 +600,7 @@ const controller = {
                         Where p.no = ?
                     `, [actualQuantity, productId]);
                     
-                    next("성공적으로 처리되었습니다");
+                    next({message: "성공적으로 처리되었습니다"});
                 }
             } catch (e) {
                 connection.rollback();
