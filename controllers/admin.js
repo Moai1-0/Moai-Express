@@ -5,7 +5,6 @@ const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const { Users, Shops, sequelize } = require('../models');
 const dayjs = require('dayjs');
 
-
 const PAGINATION_COUNT = 10;
 
 const controller = {
@@ -228,6 +227,7 @@ const controller = {
         }
     },
     async getUser({ admin, query }, { pool }, next) {
+
         try {
             // const admin_no = auth(admin, "admin_no");
             const user_no = param(query, 'user_no');
@@ -367,6 +367,250 @@ const controller = {
         }
     },
 
+    async mvpGetPreConfirmedReservation(req, { pool }, next) {
+        console.log(1123);
+        try {
+           const [preConfirmedResult] = await pool.query(`
+                SELECT r.no, r.total_purchase_price, r.total_purchase_quantity, p.name, u.phone_number
+                FROM reservations as r
+                LEFT OUTER JOIN user_mvp as u
+                ON r.user_mvp_no = u.no
+                LEFT OUTER JOIN products as p
+                ON r.product_no = p.no
+                WHERE r.status = 'pre_confirmed'
+           `);
+           next(preConfirmedResult); 
+        } catch (e) {
+            next(e);
+        }
+    },
+
+    async mvpPatchPreConfirmedReservation({ body }, {pool}, next) {
+        const rNo = param(body, 'no');
+
+        try {
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                const [patchResult] = await connection.query(`
+                    UPDATE reservations as r
+                    SET r.status = 'ongoing'
+                    WHERE r.no = ?
+                `, rNo);
+
+                await connection.commit();
+                next({ message: "이체 확인 상태로 변경되었습니다." })
+            } catch(e) {
+                await connection.rollback();
+                next(e)
+            } finally {
+                connection.release();
+            }
+        } catch(e) {
+            next(e)
+        }
+        
+    },
+
+    async mvpGetNoActualQuantityProduct(req, { pool }, next) {
+        try {
+            const [productsResult] = await pool.query(`
+                SELECT p.no AS 'product_no', p.name AS 'product_name', s.name AS 'shop_name', p.expected_quantity AS 'expected_quantity'
+                FROM products as p
+                JOIN shops as s
+                ON p.no = s.no
+                WHERE actual_quantity IS NULL
+            `)
+            next(productsResult)
+        } catch(e) {
+            next(e)
+        }
+    },
+
+    async mvpPatchActualQuantityProduct ({ body }, { pool }, next) {
+        const actualQuantity = param(body, "actual_quantity");
+        const expectedQuantity = param(body, 'expected_quantity');
+        const productId = param(body, "product_id");
+        
+
+        try {
+            if (expectedQuantity < actualQuantity) {
+                throw err(400, "예상 재고보다 입력된 재고량이 더 많습니다");
+            }
+            
+            const [reservationResult] = await pool.query(`
+                SELECT *
+                FROM reservations as r 
+                WHERE r.product_no = ?
+            `, [productId]);
+
+            const connection = await pool.getConnection(async conn => await conn);
+
+            try {
+                if (reservationResult.count <= 0) {
+                    connection.query(`
+                        UPDATE products as p
+                        SET p.status = 'done'
+                        WHERE p.no = ?
+                    `, [productId])
+                    next("예약이 없어 상품 판매가 종료되었습니다.")
+                } 
+                
+                let count = actualQuantity
+
+                for (const r of reservationResult) {
+                    let totalPurchased = r.total_purchase_quantity
+                    const productPrice = r.total_purchase_price / totalPurchased
+
+
+                    if (totalPurchased <= count) {
+                        count -= totalPurchased
+                        await connection.query( `
+                            INSERT INTO orders (
+                                reservation_no,
+                                product_no,
+                                user_mvp_no,
+                                shop_no,
+                                purchase_quantity,
+                                purchase_price,
+                                return_price,
+                                status
+                            ) 
+                            VALUES(?,?,?,?,?,?,?,?)
+                        `, [
+                            r.no,
+                            r.product_no,
+                            r.user_mvp_no,
+                            r.shop_no,
+                            totalPurchased,
+                            r.total_purchase_price,
+                            0,
+                            "pre_pickup"
+                        ]);
+                    } else {
+                        if (count > 0) {
+                            await connection.query( `
+                                INSERT INTO orders (
+                                    reservation_no,
+                                    product_no,
+                                    user_mvp_no,
+                                    shop_no,
+                                    purchase_quantity,
+                                    purchase_price,
+                                    return_price,
+                                    status
+                                ) 
+                                VALUES(?,?,?,?,?,?,?,?)
+                        `, [
+                            r.no,
+                            r.product_no,
+                            r.user_mvp_no,
+                            r.shop_no,
+                            count,
+                            count * productPrice,
+                            0,
+                            "pre_pickup"
+                        ]);
+                            totalPurchased -= count
+                            count = 0
+                        }
+                        if (totalPurchased > 0 ) {
+                            await connection.query( `
+                            INSERT INTO orders (
+                                reservation_no,
+                                product_no,
+                                user_mvp_no,
+                                shop_no,
+                                purchase_quantity,
+                                purchase_price,
+                                return_price,
+                                status
+                            ) 
+                            VALUES(?,?,?,?,?,?,?,?)
+                        `, [
+                            r.no,
+                            r.product_no,
+                            r.user_mvp_no,
+                            r.shop_no,
+                            totalPurchased,
+                            0,
+                            totalPurchased*productPrice,
+                            "pre_return"
+                        ]);
+                        }
+                    }
+                    await connection.query(`
+                        UPDATE reservations as r
+                        SET r.status = "waiting"
+                        WHERE r.no = ?
+                    `,[r.no]);
+
+                    await connection.query(`
+                        UPDATE products as p
+                        SET p.actual_quantity = ?
+                        Where p.no = ?
+                    `, [actualQuantity, productId]);
+
+                    next("성공적으로 처리되었습니다");
+                }
+            } catch (e) {
+                connection.rollback();
+                next(e)
+            } finally {
+                connection.release();
+            }
+
+        } catch (e) {
+            next(e)
+        }
+
+    },
+
+    
 };
 
 module.exports = controller;
+
+// const makeOrderSQL = (r, quantity, singlePrice, isReturn) => {
+
+//     console.log();
+//     let sql = `
+//     INSERT INTO orders (
+//         reservation_no,
+//         product_no,
+//         user_mvp_no,
+//         shop_no,
+//         purchase_quantity,
+//         purchase_price,
+//         return_price,
+//         status
+//     ) 
+//     VALUES(
+//         ${r.no},
+//         ${r.product_no},
+//         ${r.user_mvp_no},
+//         ${r.shop_no},
+//         ${quantity},
+//         ${isReturn ? 0 :quantity * singlePrice},
+//         ${isReturn ? quantity * singlePrice : 0},
+//         ${isReturn ? 'pre_return' : 'pre_pickup'})
+//     `
+//     return sql
+// }
+
+/*
+최종재고입력해야 하는 상품 리스트업
+
+INSERT INTO orders (
+                                reservation_no,
+                                product_no,
+                                user_no,
+                                shop_no,
+                                purchase_quantity,
+                                purchase_price,
+                                return_price,
+                                status
+                            )
+                            VALUES
+                            (?,?,?,?,?,?,?,"pre_pickup")
+*/
