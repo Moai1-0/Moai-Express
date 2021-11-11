@@ -5,7 +5,6 @@ const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const { Users, Shops, sequelize } = require('../models');
 const dayjs = require('dayjs');
 
-
 const PAGINATION_COUNT = 10;
 
 const controller = {
@@ -418,7 +417,7 @@ const controller = {
             const [productsResult] = await pool.query(`
                 SELECT p.no AS 'product_no', p.name AS 'product_name', s.name AS 'shop_name', p.expected_quantity AS 'expected_quantity'
                 FROM products as p
-                LEFT OUTER JOIN shops as s
+                JOIN shops as s
                 ON p.no = s.no
                 WHERE actual_quantity IS NULL
             `)
@@ -436,8 +435,7 @@ const controller = {
 
         try {
             if (expectedQuantity < actualQuantity) {
-                print("Error")
-                throw Error()
+                throw err(400, "예상 재고보다 입력된 재고량이 더 많습니다");
             }
             
             const [reservationResult] = await pool.query(`
