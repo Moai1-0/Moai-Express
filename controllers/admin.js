@@ -458,6 +458,24 @@ const controller = {
                 
                 let count = actualQuantity
 
+                /**
+                 * 수령 시
+                 * phone_number
+                 * depositor_name
+                 * product_name
+                 * total_purchase_quantity
+                 * pickup_start_datetime
+                 * pickup_end_datetime
+                 */
+
+                /**
+                 * 환급 시
+                 * phone_number
+                 * depositor_name
+                 * product_name
+                 * total_purchase_quantity
+                 * total_return_price (환급금 총액)
+                 */
                 for (const r of reservationResult) {
                     let totalPurchased = r.total_purchase_quantity
                     const productPrice = r.total_purchase_price / totalPurchased
@@ -550,7 +568,7 @@ const controller = {
                         SET p.actual_quantity = ?
                         Where p.no = ?
                     `, [actualQuantity, productId]);
-
+                    
                     next("성공적으로 처리되었습니다");
                 }
             } catch (e) {
