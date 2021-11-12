@@ -379,22 +379,60 @@ const controller = {
 
     async mvpGetPreConfirmedReservation(req, { pool }, next) {
         try {
-           const [preConfirmedResult] = await pool.query(`
-                SELECT r.no, r.total_purchase_price, r.total_purchase_quantity, p.name, u.phone_number
+            const [preConfirmedResult] = await pool.query(`
+                SELECT
+                r.no AS reservation_no,
+                r.total_purchase_price,
+                r.total_purchase_quantity,
+                r.bank,
+                r.depositor_name,
+                r.account_number,
+                u.phone_number,
+                s.name AS shop_name,
+                p.rest_quantity,
+                p.name AS product_name
                 FROM reservations as r
                 LEFT OUTER JOIN user_mvp as u
                 ON r.user_mvp_no = u.no
                 LEFT OUTER JOIN products as p
                 ON r.product_no = p.no
-                WHERE r.status = 'pre_confirmed'
+                LEFT JOIN shops as s
+                ON r.shop_no = s.no
+                WHERE r.status = 'pre_confirmed';
+                
            `);
-           next(preConfirmedResult); 
+            const [confirmedResult] = await pool.query(`
+                SELECT
+                r.no AS reservation_no,
+                r.total_purchase_price,
+                r.total_purchase_quantity,
+                r.bank,
+                r.depositor_name,
+                r.account_number,
+                u.phone_number,
+                s.name AS shop_name,
+                p.rest_quantity,
+                p.name AS product_name
+                FROM reservations as r
+                LEFT OUTER JOIN user_mvp as u
+                ON r.user_mvp_no = u.no
+                LEFT OUTER JOIN products as p
+                ON r.product_no = p.no
+                LEFT JOIN shops as s
+                ON r.shop_no = s.no
+                WHERE r.status = 'ongoing';
+                
+            `);
+            next({
+                preConfirmedList: preConfirmedResult,
+                confirmedList: confirmedResult
+            });
         } catch (e) {
             next(e);
         }
     },
 
-    async mvpPatchPreConfirmedReservation({ body }, {pool}, next) {
+    async mvpPatchPreConfirmedReservation({ body }, { pool }, next) {
         const reservaton_no = param(body, 'reservation_no');
 
         try {
@@ -408,16 +446,21 @@ const controller = {
                 `, reservaton_no);
 
                 const [temp] = await connection.query(`
-                            SELECT r.depositor_name, u.phone_number, p.name, r.total_purchase_quantity ,p.expiry_datetime
-                            FROM reservations as r
-                            JOIN products as p
-                            ON p.no = r.product_no
-                            JOIN user_mvp as u
-                            ON r.user_mvp_no = u.no
-                            WHERE r.no = ?
-                        `, [reservaton_no])
-                let tempMessage = temp[0]
-                tempMessage["expiry_datetime"] = dayjs(tempMessage["expiry_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`)
+                    SELECT
+                    r.depositor_name,
+                    u.phone_number,
+                    p.name,
+                    r.total_purchase_quantity ,
+                    p.expiry_datetime
+                    FROM reservations as r
+                    JOIN products as p
+                    ON p.no = r.product_no
+                    JOIN user_mvp as u
+                    ON r.user_mvp_no = u.no
+                    WHERE r.no = ?
+                `, [reservaton_no]);
+                let tempMessage = temp[0];
+                tempMessage["expiry_datetime"] = dayjs(tempMessage["expiry_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`);
 
                 console.log(JSON.stringify(tempMessage));
 
@@ -425,47 +468,58 @@ const controller = {
                 await connection.commit();
 
 
-                next({ message: "이체 확인 상태로 변경되었습니다." })
-            } catch(e) {
+                next({ message: "이체 확인 상태로 변경되었습니다." });
+            } catch (e) {
                 await connection.rollback();
-                next(e)
+                next(e);
             } finally {
                 connection.release();
             }
-        } catch(e) {
-            next(e)
+        } catch (e) {
+            next(e);
         }
-        
+
     },
 
     async mvpGetNoActualQuantityProduct(req, { pool }, next) {
         try {
             const [productsResult] = await pool.query(`
-                SELECT p.no AS 'product_no', p.name AS 'product_name', s.name AS 'shop_name', p.expected_quantity AS 'expected_quantity'
+                SELECT 
+                p.no AS 'product_no',
+                p.name AS 'product_name',
+                s.name AS 'shop_name',
+                p.expected_quantity,
+                p.rest_quantity,
+                p.expiry_datetime,
+                p.pickup_start_datetime,
+                p.pickup_end_datetime,
+                p.discounted_price
                 FROM products as p
                 JOIN shops as s
                 ON p.no = s.no
-                WHERE actual_quantity IS NULL
-            `)
-            next(productsResult)
-        } catch(e) {
-            next(e)
+                WHERE actual_quantity IS NULL;
+            `);
+            next({
+                productList: productsResult
+            });
+        } catch (e) {
+            next(e);
         }
     },
 
-    async mvpPatchActualQuantityProduct ({ body }, { pool }, next) {
+    async mvpPatchActualQuantityProduct({ body }, { pool }, next) {
         try {
             const actual_quantity = param(body, "actual_quantity");
             const expected_quantity = param(body, 'expected_quantity');
             const product_id = param(body, "product_id");
-            
+
             let pickupArray = [];
             let returnArray = [];
 
             if (expected_quantity < actual_quantity) {
                 throw err(400, "예상 재고보다 입력된 재고량이 더 많습니다");
             }
-            
+
             const [reservationResult] = await pool.query(`
                 SELECT
                 r.no,
@@ -494,15 +548,15 @@ const controller = {
                         UPDATE products as p
                         SET p.status = 'done'
                         WHERE p.no = ?
-                    `, [product_id])
-                    next({message: "예약이 없어 상품 판매가 종료되었습니다."})
-                } 
-                
-                let count = actual_quantity
-            
+                    `, [product_id]);
+                    next({ message: "예약이 없어 상품 판매가 종료되었습니다." });
+                }
+
+                let count = actual_quantity;
+
                 for (const r of reservationResult) {
-                    let totalPurchased = r.total_purchase_quantity
-                    const productPrice = r.total_purchase_price / totalPurchased
+                    let totalPurchased = r.total_purchase_quantity;
+                    const productPrice = r.total_purchase_price / totalPurchased;
 
                     const [temp] = await connection.query(`
                         SELECT 
@@ -519,12 +573,12 @@ const controller = {
                         WHERE r.no = ?
                     `, [r.no]);
 
-                    temp[0]["pickup_start_datetime"] = dayjs(temp[0]["pickup_start_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`)
-                    temp[0]["pickup_end_datetime"] = dayjs(temp[0]["pickup_end_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`)
+                    temp[0]["pickup_start_datetime"] = dayjs(temp[0]["pickup_start_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`);
+                    temp[0]["pickup_end_datetime"] = dayjs(temp[0]["pickup_end_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`);
 
                     if (totalPurchased <= count) {
-                        count -= totalPurchased
-                        await connection.query( `
+                        count -= totalPurchased;
+                        await connection.query(`
                             INSERT INTO orders (
                                 reservation_no,
                                 product_no,
@@ -546,13 +600,13 @@ const controller = {
                             0,
                             "pre_pickup"
                         ]);
-                        let tempPickup = JSON.parse(JSON.stringify(temp[0]))
-                        tempPickup["total_purchase_quantity"] = totalPurchased
-                        pickupArray.push(tempPickup)
+                        let tempPickup = JSON.parse(JSON.stringify(temp[0]));
+                        tempPickup["total_purchase_quantity"] = totalPurchased;
+                        pickupArray.push(tempPickup);
 
                     } else {
                         if (count > 0) {
-                            await connection.query( `
+                            await connection.query(`
                                 INSERT INTO orders (
                                     reservation_no,
                                     product_no,
@@ -565,23 +619,23 @@ const controller = {
                                 ) 
                                 VALUES(?,?,?,?,?,?,?,?)
                         `, [
-                            r.no,
-                            r.product_no,
-                            r.user_mvp_no,
-                            r.shop_no,
-                            count,
-                            count * productPrice,
-                            0,
-                            "pre_pickup"
-                        ]);
-                            let tempPickup = JSON.parse(JSON.stringify(temp[0]))
-                            tempPickup["total_purchase_quantity"] = count
-                            pickupArray.push(tempPickup)
-                            totalPurchased -= count
-                            count = 0
+                                r.no,
+                                r.product_no,
+                                r.user_mvp_no,
+                                r.shop_no,
+                                count,
+                                count * productPrice,
+                                0,
+                                "pre_pickup"
+                            ]);
+                            let tempPickup = JSON.parse(JSON.stringify(temp[0]));
+                            tempPickup["total_purchase_quantity"] = count;
+                            pickupArray.push(tempPickup);
+                            totalPurchased -= count;
+                            count = 0;
                         }
-                        if (totalPurchased > 0 ) {
-                            await connection.query( `
+                        if (totalPurchased > 0) {
+                            await connection.query(`
                             INSERT INTO orders (
                                 reservation_no,
                                 product_no,
@@ -594,33 +648,33 @@ const controller = {
                             ) 
                             VALUES(?,?,?,?,?,?,?,?)
                         `, [
-                            r.no,
-                            r.product_no,
-                            r.user_mvp_no,
-                            r.shop_no,
-                            totalPurchased,
-                            0,
-                            totalPurchased*productPrice,
-                            "pre_return"
-                        ]);
-                            let tempReturn = JSON.parse(JSON.stringify(temp[0]))
-                            tempReturn["total_purchase_quantity"] = totalPurchased
-                            tempReturn["total_return_price"] = totalPurchased*productPrice
+                                r.no,
+                                r.product_no,
+                                r.user_mvp_no,
+                                r.shop_no,
+                                totalPurchased,
+                                0,
+                                totalPurchased * productPrice,
+                                "pre_return"
+                            ]);
+                            let tempReturn = JSON.parse(JSON.stringify(temp[0]));
+                            tempReturn["total_purchase_quantity"] = totalPurchased;
+                            tempReturn["total_return_price"] = totalPurchased * productPrice;
 
-                            returnArray.push(tempReturn)
+                            returnArray.push(tempReturn);
 
                         }
 
                         console.log(returnArray, "RETURN_ARR###");
                         console.log(pickupArray, "PICKUP_ARR###");
-                        
+
 
                     }
                     await connection.query(`
                         UPDATE reservations as r
                         SET r.status = "waiting"
                         WHERE r.no = ?
-                    `,[r.no]);
+                    `, [r.no]);
 
                     await connection.query(`
                         UPDATE products as p
@@ -630,7 +684,7 @@ const controller = {
                 }
             } catch (e) {
                 connection.rollback();
-                next(e)
+                next(e);
             } finally {
                 connection.release();
             }
@@ -639,17 +693,17 @@ const controller = {
                 for (let r of returnArray) {
                     const {
                         phone_number,
-                        depositor_name, 
+                        depositor_name,
                         product_name,
                         total_purchase_quantity,
                         total_return_price
                     } = r;
-    
+
                     const kakaoResult = await sendKakaoMessage({
                         to: `${phone_number}`,
                         from: `01043987759`,
                         text: template.confirmReturn({
-                            depositor_name, 
+                            depositor_name,
                             product_name,
                             total_purchase_quantity,
                             shop_name,
@@ -660,25 +714,25 @@ const controller = {
                             "pfId": require('../config').solapi.pfId
                         }
                     });
-    
+
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
                 }
-                
+
                 for (let p of pickupArray) {
                     const {
                         phone_number,
-                        depositor_name, 
+                        depositor_name,
                         product_name,
                         total_purchase_quantity,
                         pickup_start_datetime,
                         pickup_end_datetime,
                     } = p;
-    
+
                     const kakaoResult = await sendKakaoMessage({
                         to: `${phone_number}`,
                         from: `01043987759`,
                         text: template.confirmPickUp({
-                            depositor_name, 
+                            depositor_name,
                             product_name,
                             total_purchase_quantity,
                             pickup_start_datetime,
@@ -690,10 +744,10 @@ const controller = {
                             "pfId": require('../config').solapi.pfId
                         }
                     });
-    
+
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
-                    next({message: "성공적으로 처리되었습니다"});
+                    next({ message: "성공적으로 처리되었습니다" });
                 }
             } catch (e) {
                 /**
@@ -702,11 +756,11 @@ const controller = {
                 next(e);
             }
         } catch (e) {
-            next(e)
+            next(e);
         }
     },
 
-    
+
 };
 
 module.exports = controller;
