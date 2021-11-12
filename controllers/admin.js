@@ -760,51 +760,55 @@ const controller = {
         }
     },
 
+    async mvpGetOrderPreStatus(req, { pool }, next) {
+
+        try {
+            const [orderResult] = await pool.query(`
+            SELECT 
+            o.no AS order_no,
+            r.depositor_name,
+            u.phone_number,
+            s.name AS shop_name,
+            p.name AS product_name,
+            o.purchase_quantity,
+            o.purchase_price,
+            o.return_price,
+            o.status
+            FROM orders as o
+            JOIN reservations as r
+            ON o.reservation_no = r.no
+            JOIN user_mvp as u
+            ON o.user_mvp_no = u.no
+            JOIN products as p
+            ON o.product_no = p.no
+            JOIN shops as s
+            ON o.shop_no = s.no
+            WHERE o.status = "pre_pickup" OR o.status = "pre_return"
+            `) 
+            next(orderResult)
+
+        } catch (e) {
+            next(e)
+        }
+    },
+
+    async mvpPatchOrderPreStatus({ body }, { pool }, next) {
+        try {
+            const product_id = param(body, "order_no");
+            console.log(product_id);
+
+            await pool.query (`
+            SELECT *
+            FROM reservations
+            `)
+
+        } catch (e) {
+            console.log(e);
+        }
+
+    }
 
 };
 
 module.exports = controller;
 
-// const makeOrderSQL = (r, quantity, singlePrice, isReturn) => {
-
-//     console.log();
-//     let sql = `
-//     INSERT INTO orders (
-//         reservation_no,
-//         product_no,
-//         user_mvp_no,
-//         shop_no,
-//         purchase_quantity,
-//         purchase_price,
-//         return_price,
-//         status
-//     ) 
-//     VALUES(
-//         ${r.no},
-//         ${r.product_no},
-//         ${r.user_mvp_no},
-//         ${r.shop_no},
-//         ${quantity},
-//         ${isReturn ? 0 :quantity * singlePrice},
-//         ${isReturn ? quantity * singlePrice : 0},
-//         ${isReturn ? 'pre_return' : 'pre_pickup'})
-//     `
-//     return sql
-// }
-
-/*
-최종재고입력해야 하는 상품 리스트업
-
-INSERT INTO orders (
-                                reservation_no,
-                                product_no,
-                                user_no,
-                                shop_no,
-                                purchase_quantity,
-                                purchase_price,
-                                return_price,
-                                status
-                            )
-                            VALUES
-                            (?,?,?,?,?,?,?,"pre_pickup")
-*/
