@@ -22,7 +22,7 @@ const bankCode = require('../config/bankCode.json');
 
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
-const reservationLogApi = require("../db_api/reservation_log_api")
+const reservationLogApi = require("../db_api/reservation_log_api");
 const authenticationLogApi = require("../db_api/authentication_log_api.js");
 const pointLogApi = require("../db_api/point_log_api");
 
@@ -132,8 +132,8 @@ const controller = {
                 p.description,
                 p.expiry_datetime,
                 p.pickup_start_datetime,
-                p.pickup_end_datetime,
-                p.google_link
+                p.pickup_end_datetime
+                
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
@@ -524,9 +524,9 @@ const controller = {
                 `, [user_no]);
 
                 await pointLogApi.postLogPointModels(pointResult.insertId,
-                                                    0,
-                                                    0,
-                                                    connection);
+                    0,
+                    0,
+                    connection);
 
                 await connection.commit();
                 next({ message: "가입되었습니다." });
@@ -559,8 +559,8 @@ const controller = {
         try {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
- 
-            const [ result ] = await pool.query(`
+
+            const [result] = await pool.query(`
             SELECT *
             FROM users
             WHERE phone = ?
@@ -588,15 +588,15 @@ const controller = {
                 // if(res.error) {
                 //     throw err(400);
                 // }
-                console.log(authCode);
+                
 
                 // 데이터베이스 접근
                 try {
                     await connection.beginTransaction();
                     // 인증번호 로그 추가 
                     await authenticationLogApi.postLogAuthentication(phone,
-                                                                    authCode,
-                                                                    connection);
+                        authCode,
+                        connection);
                     await connection.commit();
                 } catch (e) {
                     connection.rollback();
@@ -604,18 +604,18 @@ const controller = {
                     connection.release();
                 }
 
-               
+
                 next({ message: `인증코드 발송에 성공했습니다.` }); // 수정
             } catch (e) {
                 fb.ref(`/auth/sms/${phone}`).remove();
                 next(e);
             }
-            
+
             try {
                 await connection.beginTransaction();
                 // 인증번호 로그 추가 
                 await authenticationLogApi.postLogAuthentication(phone,
-                                                                 authCode);
+                    authCode);
                 await connection.commit();
             } catch (e) {
                 connection.rollback();
@@ -760,17 +760,17 @@ const controller = {
                     WHERE no = ?
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
-                
+
                 // 상품 수량 변경 사항 로그 반영
                 await productLogAPI.postLogProductQuantityModels(product_no,
-                                                              result[0].expected_quantity,
-                                                              null,
-                                                              result[0].rest_quantity - total_purchase_quantity,
-                                                              connection);
+                    result[0].expected_quantity,
+                    null,
+                    result[0].rest_quantity - total_purchase_quantity,
+                    connection);
                 // 예약 상태 변경 사항 로그 반영
                 await reservationLogApi.postLogReservationStatusModels(reserveResult.insertId,
-                                                                 "ongoing",
-                                                                 connection);
+                    "ongoing",
+                    connection);
 
 
 
@@ -819,11 +819,11 @@ const controller = {
                 `, [return_price, user_no, user_no, return_price]);
 
 
-                
+
                 await pointLogApi.postLogPointModels(result1[0].no,
-                                                    -(parseInt(return_price)),
-                                                    result1[0].point -(parseInt(return_price)),
-                                                    connection);
+                    -(parseInt(return_price)),
+                    result1[0].point - (parseInt(return_price)),
+                    connection);
                 await connection.commit();
 
                 next({ message: "환급신청이 완료되었습니다." });
@@ -1571,7 +1571,7 @@ const controller = {
                 AND u.enabled = 1
                 AND a.enabled = 1
                 AND p.enabled = 1
-                `, [ user_no ]);
+                `, [user_no]);
             next({
                 ...result[0],
                 birthday: dayjs(result[0].birthday).format(`YYYY년 MM월 DD일`)
@@ -1590,7 +1590,7 @@ const controller = {
             const phone_number = param(body, 'phone_number');
             const total_purchase_quantity = param(body, 'total_purchase_quantity');
             const total_purchase_price = param(body, 'total_purchase_price');
-            
+
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
@@ -1661,15 +1661,6 @@ const controller = {
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
 
-                await connection.commit();
-            } catch (e) {
-                await connection.rollback();
-                next(e);
-            } finally {
-                connection.release();
-            }
-
-            try {
                 const kakaoResult = await sendKakaoMessage({
                     to: `${phone_number}`,
                     from: `01043987759`,
@@ -1682,10 +1673,10 @@ const controller = {
                         "pfId": require('../config').solapi.pfId
                     }
                 });
-                
+
                 if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
-                const mailResult = await mailer.sendMailToAdmins({ 
+                const mailResult = await mailer.sendMailToAdmins({
                     subject: '예약 알림',
                     text: template.completeReservationApplication({
                         depositor_name,
@@ -1694,11 +1685,15 @@ const controller = {
                 });
 
                 if (mailResult === null) throw err(400, '메일 전송에 실패했습니다.');
-
-                next({ message: "예약되었습니다." });
+                await connection.commit();
+                next({message:'예약 됐습니다'})
             } catch (e) {
+                await connection.rollback();
                 next(e);
+            } finally {
+                connection.release();
             }
+
         } catch (e) {
             next(e);
         }

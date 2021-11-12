@@ -80,7 +80,7 @@ const controller = {
     },
     async signin({ body }, { pool }, next) {
         try {
-            const email = param(body, 'email');
+            const username = param(body, 'username');
             const password = param(body, 'password');
 
             const [result] = await pool.query(`
@@ -88,15 +88,14 @@ const controller = {
                 *
                 FROM admins
                 WHERE email = ?;
-            `, [email]);
+            `, [username]);
 
             const accountValid = compareSync(password.toString(), result[0].password);
             if (result.length < 1 || !accountValid) throw err.Unauthorized(`아이디 또는 비밀번호가 일치하지 않습니다.`);
 
             const token = encodeToken({
                 type: `admin`,
-                shop_no: result[0].no,
-                email: result[0].email
+                admin_no: result[0].no,
             }, { expiresIn: '7d' });
 
             next({ token });
@@ -511,10 +510,10 @@ const controller = {
         try {
             const actual_quantity = param(body, "actual_quantity");
             const product_no = param(body, "product_no");
-            
+
             let pickupArray = [];
             let returnArray = [];
-            
+
             const [reservationResult] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
@@ -559,11 +558,11 @@ const controller = {
                         AND p.enabled = 1
                     `, [product_no]);
 
-                    next({message: "예약이 없어 상품 판매가 종료되었습니다."});
-                } 
-                
+                    next({ message: "예약이 없어 상품 판매가 종료되었습니다." });
+                }
+
                 let leftQuantity = actual_quantity;
-            
+
                 for (let r of reservationResult) {
                     let totalPurchased = r.total_purchase_quantity;
                     const productPrice = r.total_purchase_price / totalPurchased;
@@ -613,14 +612,14 @@ const controller = {
                             0,
                             "pre_pickup"
                         ]);
-                        let tempPickup = { 
+                        let tempPickup = {
                             ...temp[0],
                             total_purchase_quantity: totalPurchased
                         };
                         pickupArray.push(tempPickup);
                     } else {
                         if (leftQuantity > 0) {
-                            await connection.query( `
+                            await connection.query(`
                                 INSERT INTO orders (
                                     reservation_no,
                                     product_no,
@@ -633,16 +632,16 @@ const controller = {
                                 ) 
                                 VALUES(?,?,?,?,?,?,?,?)
                         `, [
-                            r.reservation_no,
-                            r.product_no,
-                            r.user_mvp_no,
-                            r.shop_no,
-                            leftQuantity,
-                            leftQuantity * productPrice,
-                            0,
-                            "pre_pickup"
-                        ]);
-                            let tempPickup = { 
+                                r.reservation_no,
+                                r.product_no,
+                                r.user_mvp_no,
+                                r.shop_no,
+                                leftQuantity,
+                                leftQuantity * productPrice,
+                                0,
+                                "pre_pickup"
+                            ]);
+                            let tempPickup = {
                                 ...temp[0],
                                 total_purchase_quantity: leftQuantity
                             };
@@ -651,8 +650,8 @@ const controller = {
                             leftQuantity = 0;
                         }
 
-                        if (totalPurchased > 0 ) {
-                            await connection.query( `
+                        if (totalPurchased > 0) {
+                            await connection.query(`
                             INSERT INTO orders (
                                 reservation_no,
                                 product_no,
@@ -665,19 +664,19 @@ const controller = {
                             ) 
                             VALUES(?,?,?,?,?,?,?,?)
                         `, [
-                            r.reservation_no,
-                            r.product_no,
-                            r.user_mvp_no,
-                            r.shop_no,
-                            totalPurchased,
-                            0,
-                            totalPurchased*productPrice,
-                            "pre_return"
-                        ]);
-                            let tempReturn = { 
+                                r.reservation_no,
+                                r.product_no,
+                                r.user_mvp_no,
+                                r.shop_no,
+                                totalPurchased,
+                                0,
+                                totalPurchased * productPrice,
+                                "pre_return"
+                            ]);
+                            let tempReturn = {
                                 ...temp[0],
                                 total_purchase_quantity: totalPurchased,
-                                total_return_price: totalPurchased * (productPrice+return_price)
+                                total_return_price: totalPurchased * (productPrice + return_price)
                             };
                             returnArray.push(tempReturn);
                         }
@@ -692,7 +691,7 @@ const controller = {
                         UPDATE products as p
                         SET p.actual_quantity = ?
                         Where p.no = ?;
-                    `,[r.reservation_no, actual_quantity, product_no]);
+                    `, [r.reservation_no, actual_quantity, product_no]);
                 }
             } catch (e) {
                 await connection.rollback();
@@ -711,12 +710,12 @@ const controller = {
                         pickup_start_datetime,
                         pickup_end_datetime,
                     } = p;
-    
+
                     const kakaoResult = await sendKakaoMessage({
                         to: `${phone_number}`,
                         from: `01043987759`,
                         text: template.confirmPickUp({
-                            depositor_name, 
+                            depositor_name,
                             product_name,
                             total_purchase_quantity,
                             pickup_start_datetime,
@@ -740,12 +739,12 @@ const controller = {
                         total_purchase_quantity,
                         total_return_price
                     } = r;
-    
+
                     const kakaoResult = await sendKakaoMessage({
                         to: `${phone_number}`,
                         from: `01043987759`,
                         text: template.confirmReturn({
-                            depositor_name, 
+                            depositor_name,
                             product_name,
                             total_purchase_quantity,
                             shop_name,
@@ -759,8 +758,8 @@ const controller = {
 
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
                 }
-                
-                next({message: "성공적으로 처리되었습니다"});
+
+                next({ message: "성공적으로 처리되었습니다" });
             } catch (e) {
                 /**
                  * 이메일 전송
@@ -779,6 +778,7 @@ const controller = {
             o.no AS order_no,
             r.depositor_name,
             u.phone_number,
+            r.account_number,
             s.name AS shop_name,
             p.name AS product_name,
             o.purchase_quantity,
@@ -795,7 +795,7 @@ const controller = {
             JOIN shops AS s
             ON o.shop_no = s.no
             WHERE o.status = "pre_pickup" OR o.status = "pre_return"
-            `); 
+            `);
 
             next(orderResult);
         } catch (e) {
@@ -828,7 +828,7 @@ const controller = {
                     WHERE no = ? 
                 `, [update_status, order_no]);
 
-                const [reservationTemp] = await connection.query (`
+                const [reservationTemp] = await connection.query(`
                     SELECT *
                     FROM orders AS o
                     WHERE o.reservation_no = ? 
@@ -848,13 +848,13 @@ const controller = {
                     WHERE no = ? 
                 `, [reservation_no]);
 
-                const [productTemp] = await connection.query (`
+                const [productTemp] = await connection.query(`
                     SELECT *
                     FROM reservations AS r
                     WHERE r.product_no = ? 
                     AND r.status != 'done'
                 `, [product_no]);
-                
+
                 if (productTemp.length > 0) {
                     await connection.commit();
                     next({ message: "입력이 완료되었습니다" });
