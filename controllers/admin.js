@@ -784,28 +784,92 @@ const controller = {
             JOIN shops as s
             ON o.shop_no = s.no
             WHERE o.status = "pre_pickup" OR o.status = "pre_return"
-            `) 
-            next(orderResult)
+            `); 
+            next(orderResult);
 
         } catch (e) {
-            next(e)
+            next(e);
         }
     },
 
     async mvpPatchOrderPreStatus({ body }, { pool }, next) {
         try {
-            const product_id = param(body, "order_no");
-            console.log(product_id);
+            const order_no = param(body, 'order_no');
+            const connection = await pool.getConnection(async conn => await conn);
 
-            await pool.query (`
-            SELECT *
-            FROM reservations
-            `)
+            await connection.beginTransaction();
+
+            const [orderResult] = await connection.query(`
+                SELECT *
+                FROM orders as o
+                WHERE o.no = ? AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
+            `, [order_no]);
+
+            const orderStatus = orderResult[0].status; // 상태 추출
+            const reservationNo = orderResult[0].reservation_no;
+            const productNo = orderResult[0].product_no;
+            const updateStatus = orderStatus == 'pre_pickup' ? 'pickup' : 'return';
+
+            await connection.query(`
+                UPDATE orders 
+                SET
+                status = ?
+                WHERE
+                no = ? 
+            `, [updateStatus, order_no]);
+
+            const [reservationTemp] = await connection.query (`
+                SELECT *
+                FROM orders as o
+                WHERE 
+                o.reservation_no = ? 
+                AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
+            `, [reservationNo]);
+
+            const reservationCount = reservationTemp.length;
+
+            if (reservationCount > 0) {
+                connection.commit()
+                next({message: "입력이 완료되었습니다"});
+            }
+
+            await connection.query(`
+                UPDATE reservations 
+                SET
+                status = 'done'
+                WHERE
+                no = ? 
+            `, [reservationNo]);
+
+            const [productTemp] = await connection.query (`
+                SELECT *
+                FROM reservations as r
+                WHERE 
+                r.product_no = ? 
+                AND r.status != 'done'
+            `, [productNo]);
+            
+            if (productTemp.length > 0) {
+                connection.commit()
+                next({message: "입력이 완료되었습니다"});
+            }
+
+            await connection.query(`
+                UPDATE products 
+                SET
+                status = 'done'
+                WHERE
+                no = ? 
+            `, [productNo]);
+
+            connection.commit()
+            next({message: "입력이 완료되었습니다"});
 
         } catch (e) {
-            console.log(e);
+            next(e)
+        } finally {
+            connection.release();
         }
-
     }
 
 };

@@ -21,8 +21,6 @@ router.get('/mvp/actualQuantity', admin.mvpGetNoActualQuantityProduct); // 실�
 router.patch('/mvp/actualQuantity', admin.mvpPatchActualQuantityProduct); // 실제 수량 입력
 
 router.get('/mvp/orderPreStatus', admin.mvpGetOrderPreStatus); // 확정되지 않은 Order 리스트
-router.get('/mvp/orderPreStatus', admin.mvpPatchOrderPreStatus); // Order 확정
-
-mvpPatchOrderPreStatus
+router.patch('/mvp/orderPreStatus', admin.mvpPatchOrderPreStatus); // Order 확정
 
 module.exports = router;
