@@ -695,7 +695,7 @@ const controller = {
                     `,[r.reservation_no, actual_quantity, product_no]);
                 }
             } catch (e) {
-                connection.rollback();
+                await connection.rollback();
                 next(e);
             } finally {
                 connection.release();
@@ -773,7 +773,6 @@ const controller = {
     },
 
     async mvpGetOrderPreStatus(req, { pool }, next) {
-
         try {
             const [orderResult] = await pool.query(`
             SELECT 
@@ -786,19 +785,19 @@ const controller = {
             o.purchase_price,
             o.return_price,
             o.status
-            FROM orders as o
-            JOIN reservations as r
+            FROM orders AS o
+            JOIN reservations AS r
             ON o.reservation_no = r.no
-            JOIN user_mvp as u
+            JOIN user_mvp AS u
             ON o.user_mvp_no = u.no
-            JOIN products as p
+            JOIN products AS p
             ON o.product_no = p.no
-            JOIN shops as s
+            JOIN shops AS s
             ON o.shop_no = s.no
             WHERE o.status = "pre_pickup" OR o.status = "pre_return"
             `); 
-            next(orderResult);
 
+            next(orderResult);
         } catch (e) {
             next(e);
         }
@@ -810,77 +809,73 @@ const controller = {
             const connection = await pool.getConnection(async conn => await conn);
 
             await connection.beginTransaction();
+            try {
+                const [orderResult] = await connection.query(`
+                    SELECT *
+                    FROM orders AS o
+                    WHERE o.no = ? 
+                    AND (o.status = 'pre_pickup' OR o.status = 'pre_return');
+                `, [order_no]);
 
-            const [orderResult] = await connection.query(`
-                SELECT *
-                FROM orders as o
-                WHERE o.no = ? AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
-            `, [order_no]);
+                const order_status = orderResult[0].status; // 상태 추출
+                const reservation_no = orderResult[0].reservation_no;
+                const product_no = orderResult[0].product_no;
+                const update_status = order_status === 'pre_pickup' ? 'pickup' : 'return';
 
-            const orderStatus = orderResult[0].status; // 상태 추출
-            const reservationNo = orderResult[0].reservation_no;
-            const productNo = orderResult[0].product_no;
-            const updateStatus = orderStatus == 'pre_pickup' ? 'pickup' : 'return';
+                await connection.query(`
+                    UPDATE orders 
+                    SET status = ?
+                    WHERE no = ? 
+                `, [update_status, order_no]);
 
-            await connection.query(`
-                UPDATE orders 
-                SET
-                status = ?
-                WHERE
-                no = ? 
-            `, [updateStatus, order_no]);
+                const [reservationTemp] = await connection.query (`
+                    SELECT *
+                    FROM orders AS o
+                    WHERE o.reservation_no = ? 
+                    AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
+                `, [reservation_no]);
 
-            const [reservationTemp] = await connection.query (`
-                SELECT *
-                FROM orders as o
-                WHERE 
-                o.reservation_no = ? 
-                AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
-            `, [reservationNo]);
+                const reservationCount = reservationTemp.length;
 
-            const reservationCount = reservationTemp.length;
+                if (reservationCount > 0) {
+                    await connection.commit();
+                    next({ message: "입력이 완료되었습니다" });
+                }
 
-            if (reservationCount > 0) {
-                connection.commit()
-                next({message: "입력이 완료되었습니다"});
+                await connection.query(`
+                    UPDATE reservations 
+                    SET status = 'done'
+                    WHERE no = ? 
+                `, [reservation_no]);
+
+                const [productTemp] = await connection.query (`
+                    SELECT *
+                    FROM reservations AS r
+                    WHERE r.product_no = ? 
+                    AND r.status != 'done'
+                `, [product_no]);
+                
+                if (productTemp.length > 0) {
+                    await connection.commit();
+                    next({ message: "입력이 완료되었습니다" });
+                }
+
+                await connection.query(`
+                    UPDATE products 
+                    SET status = 'done'
+                    WHERE no = ? 
+                `, [product_no]);
+
+                await connection.commit();
+                next({ message: "입력이 완료되었습니다" });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
             }
-
-            await connection.query(`
-                UPDATE reservations 
-                SET
-                status = 'done'
-                WHERE
-                no = ? 
-            `, [reservationNo]);
-
-            const [productTemp] = await connection.query (`
-                SELECT *
-                FROM reservations as r
-                WHERE 
-                r.product_no = ? 
-                AND r.status != 'done'
-            `, [productNo]);
-            
-            if (productTemp.length > 0) {
-                connection.commit()
-                next({message: "입력이 완료되었습니다"});
-            }
-
-            await connection.query(`
-                UPDATE products 
-                SET
-                status = 'done'
-                WHERE
-                no = ? 
-            `, [productNo]);
-
-            connection.commit()
-            next({message: "입력이 완료되었습니다"});
-
         } catch (e) {
-            next(e)
-        } finally {
-            connection.release();
+            next(e);
         }
     }
 
