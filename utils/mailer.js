@@ -11,8 +11,8 @@ const mailer = {
             let transporter = nodemailer.createTransport({
                 service: 'gmail',
                 host: 'smtp.gmail.com',
-                port: 587,
-                secure: false,
+                port: 465,
+                secure: true,
                 auth: {
                     user: process.env.NODEMAILER_USER,
                     pass: process.env.NODEMAILER_PASS,
@@ -27,9 +27,8 @@ const mailer = {
             }
             
             try {
-                console.log(await transporter.sendMail(options));
+                await transporter.sendMail(options);
             } catch (e) {
-                console.log(e);
                 throw err(400);
             }
             return 's';
@@ -45,8 +44,8 @@ const mailer = {
             let transporter = nodemailer.createTransport({
                 service: 'gmail',
                 host: 'smtp.gmail.com',
-                port: 587,
-                secure: false,
+                port: 465,
+                secure: true,
                 auth: {
                     user: process.env.NODEMAILER_USER,
                     pass: process.env.NODEMAILER_PASS,
@@ -61,7 +60,7 @@ const mailer = {
             }
             
             try {
-                console.log(await transporter.sendMail(options));   
+                await transporter.sendMail(options);   
             } catch (e) {
                 throw err(400);
             }

@@ -588,7 +588,7 @@ const controller = {
                 // if(res.error) {
                 //     throw err(400);
                 // }
-                
+
 
                 // 데이터베이스 접근
                 try {
@@ -1613,7 +1613,7 @@ const controller = {
                     WHERE no = ?
                     AND enabled = 1;
                 `, [phone_number, product_no]);
-                
+
                 if (result1[1][0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
                 if (result1[1][0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
                 if (result1[1][0].is_expired < 0) throw err(400, `마감된 상품입니다.`);
@@ -1660,7 +1660,7 @@ const controller = {
                     WHERE no = ?
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
-
+                console.log(require('../config').solapi.pfId);
                 const kakaoResult = await sendKakaoMessage({
                     to: `${phone_number}`,
                     from: `01043987759`,
@@ -1686,7 +1686,7 @@ const controller = {
 
                 if (mailResult === null) throw err(400, '메일 전송에 실패했습니다.');
                 await connection.commit();
-                next({message:'예약 됐습니다'})
+                next({ message: '예약 됐습니다' });
             } catch (e) {
                 await connection.rollback();
                 next(e);
