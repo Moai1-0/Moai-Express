@@ -29,7 +29,7 @@ const template = {
             total_return_price
         } = options;
 
-        return `[어비] 상품환급 안내\n\n${depositor_name}님 ${total_purchase_quantity}개 예약하신 [${product_name}] 상품이 매진되었습니다.\n\n${shop_name} 사장님께서 고객님의 예약에 감사함을 표시하기 위해 ${total_return_price}원(예약금+환급금)을 환급해드릴게요!\n\n환급금은 빠른 시간 내로 고객님의 통장에 입금될 예정입니다(최대 하루 소요)!\n\n이용해주셔서 감사합니다!`;
+        return `[어비] 상품환급 안내\n\n${depositor_name}님 ${total_purchase_quantity}개 예약하신 [${product_name}] 상품이 매진되었습니다.\n\n${shop_name} 사장님께서 고객님의 예약에 감사함을 표시하기 위해 ${total_return_price}원(예약금+환급금)을 환급해드릴게요!\n\n환급금은 빠른 시간 내로 고객님의 통장에 입금될 예정입니다(최대 하루 소요).\n\n이용해주셔서 감사합니다!`;
     },
     confirmPickUp(options) {
         const {
@@ -41,9 +41,16 @@ const template = {
             shop_name
         } = options;
 
-        return `[어비] 상품수령 안내\n\n${depositor_name}님 ${total_purchase_quantity}개 예약하신 [${product_name}] 상품이 수령 확정되었습니다.\n\n${pickup_start_datetime}시부터 ${pickup_end_datetime}시 사이에 ${shop_name} 매장에 방문해 해당 상품을 수령해주세요!\n\n이용해주셔서 감사합니다!
-        `
+        return `[어비] 상품수령 안내\n\n${depositor_name}님 ${total_purchase_quantity}개 예약하신 [${product_name}] 상품이 수령 확정되었습니다.\n\n${pickup_start_datetime}시부터 ${pickup_end_datetime}시 사이에 ${shop_name} 매장에 방문해 해당 상품을 수령해주세요!\n\n이용해주셔서 감사합니다!`;
     },
+    confirmReturnIsDone(options) {
+        const {
+            depositor_name,
+            total_return_price
+        } = options;
+
+        return `[어비] 환급 완료 안내\n\n${depositor_name}님의 계좌에 ${total_return_price}원(예약금+환급금) 환급이 완료되었습니다.\n\n고객님께 최상의 경험을 드리는 어비 서비스가 되겠습니다.\n\n이용해주셔서 감사합니다!`;
+    }
 }
 
 module.exports = template;
