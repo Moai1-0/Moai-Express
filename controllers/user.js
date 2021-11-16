@@ -52,9 +52,9 @@ const controller = {
     },
     async getProducts({ query }, { pool }, next) {
         try {
-            const region_no = param(query, 'region_no', 0); // 0:광장동
-            const sort = param(query, 'sort', 'descending');
-            condition.contains(sort, ['descending', 'impending', 'discount_rate']);
+            // const region_no = param(query, 'region_no', 0); // 0:광장동
+            const sort = param(query, 'sort', 'impending');
+            condition.contains(sort, ['impending', 'descending', 'discount_rate']);
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
@@ -67,6 +67,7 @@ const controller = {
                 p.discounted_price,
                 p.discount_rate,
                 p.return_price,
+                p.rest_quantity,
                 p.expiry_datetime,
                 s.no AS shop_no,
                 s.name AS shop_name,
@@ -83,14 +84,16 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                WHERE s.region_no = ?
-                AND s.enabled = 1
+                WHERE p.actual_quantity IS NULL
+                AND p.expiry_datetime - NOW() > 0
                 AND p.enabled = 1
-                ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC' : sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
+                AND s.enabled = 1
+                ORDER BY ${sort === 'impending' ? 'p.expiry_datetime ASC' : sort === 'descending' ? 'p.created_datetime DESC' : 'p.discount_rate DESC'}
                 LIMIT ? OFFSET ?;
-            `, [region_no, count, offset]);
-
+            `, [count, offset]);
+                
             next({
+                total_count: result.length,
                 products: result.map((product) => ({
                     ...product,
                     regular_price: product.regular_price.toLocaleString('ko-KR'),
@@ -1660,7 +1663,7 @@ const controller = {
                     WHERE no = ?
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
-                console.log(require('../config').solapi.pfId);
+
                 const kakaoResult = await sendKakaoMessage({
                     to: `${phone_number}`,
                     from: `01043987759`,
