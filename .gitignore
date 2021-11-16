@@ -1,6 +1,7 @@
 # secrets
 config.json
 admins.json
+mailAddress.json
 package-lock.json
 .DS_STORE
 

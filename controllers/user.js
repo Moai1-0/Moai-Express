@@ -1631,6 +1631,11 @@ const controller = {
                     user_mvp_no = result.insertId;
                 } else {
                     user_mvp_no = result1[0][0].no;
+                    await connection.query(`
+                        UPDATE user_mvp
+                        SET deal_count = deal_count + 1
+                        WHERE no = ?
+                    `, [user_mvp_no]);
                 }
 
                 await connection.query(`
@@ -1679,7 +1684,7 @@ const controller = {
 
                 if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
-                const mailResult = await mailer.sendMailToAdmins({
+                await mailer.sendMailToAdmins({
                     subject: '예약 알림',
                     text: template.completeReservationApplication({
                         depositor_name,
@@ -1687,16 +1692,18 @@ const controller = {
                     })
                 });
 
-                if (mailResult === null) throw err(400, '메일 전송에 실패했습니다.');
                 await connection.commit();
-                next({ message: '예약 됐습니다' });
+                next({ message: '예약됐습니다' });
             } catch (e) {
                 await connection.rollback();
+                await mailer.sendMailToDevelopers({
+                    subject: '에러 발생',
+                    text: `${e}`
+                });
                 next(e);
             } finally {
                 connection.release();
             }
-
         } catch (e) {
             next(e);
         }

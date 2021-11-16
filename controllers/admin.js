@@ -7,6 +7,7 @@ dayjs.extend(timezone);
 require('dayjs/locale/ko');
 dayjs.locale('ko');
 
+const mailer = require('../utils/mailer');
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
 const { send, sendKakaoMessage } = require('../utils/solapi');
@@ -670,7 +671,7 @@ const controller = {
                                 r.shop_no,
                                 totalPurchased,
                                 0,
-                                totalPurchased * productPrice,
+                                totalPurchased * (productPrice + return_price),
                                 "pre_return"
                             ]);
                             let tempReturn = {
@@ -680,9 +681,6 @@ const controller = {
                             };
                             returnArray.push(tempReturn);
                         }
-
-                        console.log(returnArray, "RETURN_ARR###");
-                        console.log(pickupArray, "PICKUP_ARR###");
                     }
                     await connection.query(`
                         UPDATE reservations as r
@@ -693,14 +691,11 @@ const controller = {
                         Where p.no = ?;
                     `, [r.reservation_no, actual_quantity, product_no]);
                 }
-            } catch (e) {
-                await connection.rollback();
-                next(e);
-            } finally {
-                connection.release();
-            }
 
-            try {
+                /**
+                 * 배열돌면서 쏘는 방식이 아니라
+                 * 솔라피에 배열 방식으로 넣어주는 방식으로 바꿀 예정
+                 */
                 for (let p of pickupArray) {
                     const {
                         phone_number,
@@ -761,10 +756,10 @@ const controller = {
 
                 next({ message: "성공적으로 처리되었습니다" });
             } catch (e) {
-                /**
-                 * 이메일 전송
-                 */
+                await connection.rollback();
                 next(e);
+            } finally {
+                connection.release();
             }
         } catch (e) {
             next(e);
@@ -811,8 +806,18 @@ const controller = {
             await connection.beginTransaction();
             try {
                 const [orderResult] = await connection.query(`
-                    SELECT *
+                    SELECT 
+                    o.status,
+                    o.reservation_no,
+                    o.product_no,
+                    o.return_price AS total_return_price,
+                    r.depositor_name,
+                    u.phone_number
                     FROM orders AS o
+                    JOIN reservations AS r
+                    ON o.reservation_no = r.no
+                    JOIN user_mvp AS u
+                    ON o.user_mvp_no = u.no
                     WHERE o.no = ? 
                     AND (o.status = 'pre_pickup' OR o.status = 'pre_return');
                 `, [order_no]);
@@ -820,6 +825,9 @@ const controller = {
                 const order_status = orderResult[0].status; // 상태 추출
                 const reservation_no = orderResult[0].reservation_no;
                 const product_no = orderResult[0].product_no;
+                const total_return_price = orderResult[0].total_return_price;
+                const depositor_name = orderResult[0].depositor_name;
+                const phone_number = orderResult[0].phone_number;
                 const update_status = order_status === 'pre_pickup' ? 'pickup' : 'return';
 
                 await connection.query(`
@@ -837,29 +845,48 @@ const controller = {
 
                 const reservationCount = reservationTemp.length;
 
+                // 픽업 대기나 환급 대기가 있는 상황
                 if (reservationCount > 0) {
                     await connection.commit();
+                    if (update_status === 'return') {
+                        const kakaoResult = await sendKakaoMessage({
+                            to: `${phone_number}`,
+                            from: `01043987759`,
+                            text: template.confirmReturnIsDone({
+                                depositor_name,
+                                total_return_price
+                            }),
+                            type: `CTA`,
+                            kakaoOptions: {
+                                "pfId": require('../config').solapi.pfId
+                            }
+                        });
+                        if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+                    }
                     next({ message: "입력이 완료되었습니다" });
                 }
 
+                // 픽업 대기나 환급 대기가 더 이상 없는 상황(예약 종료 처리)
                 await connection.query(`
                     UPDATE reservations 
                     SET status = 'done'
                     WHERE no = ? 
                 `, [reservation_no]);
 
+                // 예약 종료가 되지 않은 상품이 있는지 확인
                 const [productTemp] = await connection.query(`
                     SELECT *
                     FROM reservations AS r
                     WHERE r.product_no = ? 
                     AND r.status != 'done'
                 `, [product_no]);
-
+                
                 if (productTemp.length > 0) {
                     await connection.commit();
                     next({ message: "입력이 완료되었습니다" });
                 }
 
+                // 상품 마감 처리
                 await connection.query(`
                     UPDATE products 
                     SET status = 'done'
