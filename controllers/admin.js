@@ -377,52 +377,55 @@ const controller = {
         }
     },
 
+
     async mvpGetPreConfirmedReservation(req, { pool }, next) {
         try {
             const [preConfirmedResult] = await pool.query(`
-                SELECT
-                r.no AS reservation_no,
-                r.total_purchase_price,
-                r.total_purchase_quantity,
-                r.bank,
-                r.depositor_name,
-                r.account_number,
-                u.phone_number,
-                s.name AS shop_name,
-                p.rest_quantity,
-                p.name AS product_name
-                FROM reservations as r
-                LEFT OUTER JOIN user_mvp as u
-                ON r.user_mvp_no = u.no
-                LEFT OUTER JOIN products as p
-                ON r.product_no = p.no
-                LEFT JOIN shops as s
-                ON r.shop_no = s.no
-                WHERE r.status = 'pre_confirmed';
-                
-           `);
+            SELECT
+            r.no AS reservation_no,
+            r.total_purchase_price,
+            r.total_purchase_quantity,
+            r.bank,
+            r.depositor_name,
+            r.account_number,
+            u.phone_number,
+            s.name AS shop_name,
+            p.rest_quantity,
+            p.name AS product_name
+            FROM reservations as r
+            LEFT OUTER JOIN user_mvp as u
+            ON r.user_mvp_no = u.no
+            LEFT OUTER JOIN products as p
+            ON r.product_no = p.no
+            LEFT JOIN shops as s
+            ON r.shop_no = s.no
+            WHERE r.status = 'pre_confirmed'
+            AND r.enabled = 1;
+            
+       `);
             const [confirmedResult] = await pool.query(`
-                SELECT
-                r.no AS reservation_no,
-                r.total_purchase_price,
-                r.total_purchase_quantity,
-                r.bank,
-                r.depositor_name,
-                r.account_number,
-                u.phone_number,
-                s.name AS shop_name,
-                p.rest_quantity,
-                p.name AS product_name
-                FROM reservations as r
-                LEFT OUTER JOIN user_mvp as u
-                ON r.user_mvp_no = u.no
-                LEFT OUTER JOIN products as p
-                ON r.product_no = p.no
-                LEFT JOIN shops as s
-                ON r.shop_no = s.no
-                WHERE r.status = 'ongoing';
-                
-            `);
+            SELECT
+            r.no AS reservation_no,
+            r.total_purchase_price,
+            r.total_purchase_quantity,
+            r.bank,
+            r.depositor_name,
+            r.account_number,
+            u.phone_number,
+            s.name AS shop_name,
+            p.rest_quantity,
+            p.name AS product_name
+            FROM reservations as r
+            LEFT OUTER JOIN user_mvp as u
+            ON r.user_mvp_no = u.no
+            LEFT OUTER JOIN products as p
+            ON r.product_no = p.no
+            LEFT JOIN shops as s
+            ON r.shop_no = s.no
+            WHERE r.status = 'ongoing'
+            AND r.enabled = 1;
+            
+        `);
             next({
                 preConfirmedList: preConfirmedResult,
                 confirmedList: confirmedResult
@@ -433,7 +436,7 @@ const controller = {
     },
 
     async mvpPatchPreConfirmedReservation({ body }, { pool }, next) {
-        const reservaton_no = param(body, 'reservation_no');
+        const reservation_no = param(body, 'reservation_no');
 
         try {
             const connection = await pool.getConnection(async conn => await conn);
@@ -443,26 +446,26 @@ const controller = {
                     UPDATE reservations as r
                     SET r.status = 'ongoing'
                     WHERE r.no = ?
-                `, reservaton_no);
+                `, reservation_no);
 
-                const [temp] = await connection.query(`
-                    SELECT
-                    r.depositor_name,
-                    u.phone_number,
-                    p.name,
-                    r.total_purchase_quantity ,
-                    p.expiry_datetime
-                    FROM reservations as r
-                    JOIN products as p
-                    ON p.no = r.product_no
-                    JOIN user_mvp as u
-                    ON r.user_mvp_no = u.no
-                    WHERE r.no = ?
-                `, [reservaton_no]);
-                let tempMessage = temp[0];
-                tempMessage["expiry_datetime"] = dayjs(tempMessage["expiry_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`);
+                // const [temp] = await connection.query(`
+                //     SELECT
+                //     r.depositor_name,
+                //     u.phone_number,
+                //     p.name,
+                //     r.total_purchase_quantity ,
+                //     p.expiry_datetime
+                //     FROM reservations as r
+                //     JOIN products as p
+                //     ON p.no = r.product_no
+                //     JOIN user_mvp as u
+                //     ON r.user_mvp_no = u.no
+                //     WHERE r.no = ?
+                // `, [reservaton_no]);
+                // let tempMessage = temp[0];
+                // tempMessage["expiry_datetime"] = dayjs(tempMessage["expiry_datetime"]).format(`YYYY-MM-DD(ddd) a h:mm`);
 
-                console.log(JSON.stringify(tempMessage));
+                // console.log(JSON.stringify(tempMessage));
 
 
                 await connection.commit();
@@ -480,7 +483,53 @@ const controller = {
         }
 
     },
+    async mvpDeletePreConfirmedReservation({ body }, { pool }, next) {
+        const reservation_no = param(body, 'reservation_no');
 
+        try {
+            const connection = await pool.getConnection(async conn => await conn);
+            try {
+                await connection.beginTransaction();
+                const [result] = await connection.query(`
+                    SELECT * 
+                    FROM reservations
+                    WHERE
+                    no = ?
+                `, [reservation_no]);
+
+                //  에러 처리 필요하면 
+
+                await connection.query(`
+                    UPDATE reservations as r
+                    SET r.enabled = 0
+                    WHERE r.no = ?
+                `, reservation_no);
+                await connection.query(`
+                    UPDATE products 
+                    SET rest_quantity = rest_quantity + ?
+                    WHERE no = ?
+                `, [
+                    result[0].total_purchase_quantity,
+                    result[0].product_no
+                ]);
+
+
+
+                await connection.commit();
+
+
+                next({ message: "이체 확인 상태로 변경되었습니다." });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+        } catch (e) {
+            next(e);
+        }
+
+    },
     async mvpGetNoActualQuantityProduct(req, { pool }, next) {
         try {
             const [productsResult] = await pool.query(`
@@ -497,7 +546,8 @@ const controller = {
                 FROM products as p
                 JOIN shops as s
                 ON p.no = s.no
-                WHERE actual_quantity IS NULL;
+                WHERE actual_quantity IS NULL
+                ORDER BY p.expiry_datetime ASC;
             `);
             next({
                 productList: productsResult
@@ -880,7 +930,7 @@ const controller = {
                     WHERE r.product_no = ? 
                     AND r.status != 'done'
                 `, [product_no]);
-                
+
                 if (productTemp.length > 0) {
                     await connection.commit();
                     next({ message: "입력이 완료되었습니다" });

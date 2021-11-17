@@ -91,7 +91,7 @@ const controller = {
                 ORDER BY ${sort === 'impending' ? 'p.expiry_datetime ASC' : sort === 'descending' ? 'p.created_datetime DESC' : 'p.discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
-                
+
             next({
                 total_count: result.length,
                 products: result.map((product) => ({
@@ -1669,28 +1669,28 @@ const controller = {
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
 
-                const kakaoResult = await sendKakaoMessage({
-                    to: `${phone_number}`,
-                    from: `01043987759`,
-                    text: template.completeReservationApplication({
-                        depositor_name,
-                        total_purchase_price,
-                    }),
-                    type: `CTA`,
-                    kakaoOptions: {
-                        "pfId": require('../config').solapi.pfId
-                    }
-                });
+                // const kakaoResult = await sendKakaoMessage({
+                //     to: `${phone_number}`,
+                //     from: `01043987759`,
+                //     text: template.completeReservationApplication({
+                //         depositor_name,
+                //         total_purchase_price,
+                //     }),
+                //     type: `CTA`,
+                //     kakaoOptions: {
+                //         "pfId": require('../config').solapi.pfId
+                //     }
+                // });
 
-                if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+                // if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
-                await mailer.sendMailToAdmins({
-                    subject: '예약 알림',
-                    text: template.completeReservationApplication({
-                        depositor_name,
-                        total_purchase_price,
-                    })
-                });
+                // await mailer.sendMailToAdmins({
+                //     subject: '예약 알림',
+                //     text: template.completeReservationApplication({
+                //         depositor_name,
+                //         total_purchase_price,
+                //     })
+                // });
 
                 await connection.commit();
                 next({ message: '예약됐습니다' });
