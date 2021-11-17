@@ -54,6 +54,7 @@ const controller = {
         try {
             // const region_no = param(query, 'region_no', 0); // 0:광장동
             const sort = param(query, 'sort', 'impending');
+            console.log(sort, "SORT_FIRST_@@@");
             condition.contains(sort, ['impending', 'descending', 'discount_rate']);
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
@@ -61,17 +62,7 @@ const controller = {
 
             const [result] = await pool.query(`
                 SELECT
-                p.no AS product_no,
-                p.name AS product_name,
-                p.regular_price,
-                p.discounted_price,
-                p.discount_rate,
-                p.return_price,
-                p.rest_quantity,
-                p.expiry_datetime,
-                s.no AS shop_no,
-                s.name AS shop_name,
-                i.path
+                COUNT(*) AS total_count
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
@@ -88,13 +79,80 @@ const controller = {
                 AND p.expiry_datetime - NOW() > 0
                 AND p.enabled = 1
                 AND s.enabled = 1
-                ORDER BY ${sort === 'impending' ? 'p.expiry_datetime ASC' : sort === 'descending' ? 'p.created_datetime DESC' : 'p.discount_rate DESC'}
+                ;
+                
+                (SELECT
+                    1 AS rank,
+                    p.no AS product_no,
+                    p.name AS product_name,
+                    p.regular_price,
+                    p.discounted_price,
+                    p.discount_rate,
+                    p.return_price,
+                    p.rest_quantity,
+                    p.expiry_datetime,
+                    p.created_datetime,
+                    s.no AS shop_no,
+                    s.name AS shop_name,
+                    i.path
+                    FROM products AS p
+                    JOIN shops AS s
+                    ON p.shop_no = s.no
+                    LEFT JOIN (
+                        SELECT
+                        product_no,
+                        path
+                        FROM product_images
+                        WHERE enabled = 1
+                        AND sort = 1
+                    ) AS i
+                    ON p.no = i.product_no
+                    WHERE p.actual_quantity IS NULL
+                    AND p.rest_quantity > 0
+                    AND p.expiry_datetime - NOW() > 0
+                    AND p.enabled = 1
+                    AND s.enabled = 1
+                )
+                UNION
+                (SELECT
+                    2 AS rank,
+                    p.no AS product_no,
+                    p.name AS product_name,
+                    p.regular_price,
+                    p.discounted_price,
+                    p.discount_rate,
+                    p.return_price,
+                    p.rest_quantity,
+                    p.expiry_datetime,
+                    p.created_datetime,
+                    s.no AS shop_no,
+                    s.name AS shop_name,
+                    i.path
+                    FROM products AS p
+                    JOIN shops AS s
+                    ON p.shop_no = s.no
+                    LEFT JOIN (
+                        SELECT
+                        product_no,
+                        path
+                        FROM product_images
+                        WHERE enabled = 1
+                        AND sort = 1
+                    ) AS i
+                    ON p.no = i.product_no
+                    WHERE p.actual_quantity IS NULL
+                    AND p.rest_quantity <= 0
+                    AND p.expiry_datetime - NOW() > 0
+                    AND p.enabled = 1
+                    AND s.enabled = 1
+                )
+                ORDER BY RANK, ${sort === 'impending' ? 'expiry_datetime ASC' : sort === 'descending' ? 'created_datetime DESC' : 'discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
-
+            
             next({
-                total_count: result.length,
-                products: result.map((product) => ({
+                total_count: result[0].total_count,
+                products: result[1].map((product) => ({
                     ...product,
                     regular_price: product.regular_price.toLocaleString('ko-KR'),
                     discounted_price: product.discounted_price.toLocaleString('ko-KR'),
