@@ -545,7 +545,7 @@ const controller = {
                 p.discounted_price
                 FROM products as p
                 JOIN shops as s
-                ON p.no = s.no
+                ON p.shop_no = s.no
                 WHERE actual_quantity IS NULL
                 ORDER BY p.expiry_datetime ASC;
             `);
