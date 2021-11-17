@@ -568,7 +568,7 @@ const controller = {
             const [verifyAllConfirmed] = await pool.query(`
                 SELECT *
                 FROM reservations as r
-                WHERE r.product_no = ? AND r.status = 'pre_confirmed'
+                WHERE r.product_no = ? AND r.status = 'pre_confirmed' AND r.enabled = 1
             `, [product_no])
 
             if (verifyAllConfirmed.length > 0){
