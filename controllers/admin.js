@@ -601,25 +601,26 @@ const controller = {
                 AND s.enabled = 1
             `, [product_no]);
 
-            const expected_quantity = reservationResult[0].expected_quantity;
-            const return_price = reservationResult[0].return_price;
-            const shop_name = reservationResult[0].shop_name;
-
-            if (expected_quantity < actual_quantity) {
-                throw err(400, "예상 재고보다 입력된 재고량이 더 많습니다");
-            }
-
             const connection = await pool.getConnection(async conn => await conn);
+
             try {
-                if (reservationResult.count <= 0) {
+                if (reservationResult.length <= 0) {
+                    console.log(1);
                     connection.query(`
                         UPDATE products as p
-                        SET p.status = 'done'
+                        SET p.status = 'done', p.actual_quantity = ?
                         WHERE p.no = ?
                         AND p.enabled = 1
-                    `, [product_no]);
-
+                    `, [actual_quantity, product_no]);
                     next({ message: "예약이 없어 상품 판매가 종료되었습니다." });
+                }
+
+                const expected_quantity = reservationResult[0].expected_quantity;
+                const return_price = reservationResult[0].return_price;
+                const shop_name = reservationResult[0].shop_name;
+
+                if (expected_quantity < actual_quantity) {
+                    throw err(400, "예상 재고보다 입력된 재고량이 더 많습니다");
                 }
 
                 let leftQuantity = actual_quantity;
