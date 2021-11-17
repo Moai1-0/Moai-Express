@@ -400,7 +400,10 @@ const controller = {
             LEFT JOIN shops as s
             ON r.shop_no = s.no
             WHERE r.status = 'pre_confirmed'
-            AND r.enabled = 1;
+            AND r.enabled = 1
+            AND u.enabled = 1
+            AND p.enabled = 1
+            AND s.enabled = 1;
             
        `);
             const [confirmedResult] = await pool.query(`
@@ -423,7 +426,10 @@ const controller = {
             LEFT JOIN shops as s
             ON r.shop_no = s.no
             WHERE r.status = 'ongoing'
-            AND r.enabled = 1;
+            AND r.enabled = 1
+            AND u.enabled = 1
+            AND p.enabled = 1
+            AND s.enabled = 1;
             
         `);
             next({
@@ -446,6 +452,7 @@ const controller = {
                     UPDATE reservations as r
                     SET r.status = 'ongoing'
                     WHERE r.no = ?
+                    AND r.enabled = 1
                 `, reservation_no);
 
                 // const [temp] = await connection.query(`
@@ -495,6 +502,7 @@ const controller = {
                     FROM reservations
                     WHERE
                     no = ?
+                    AND r.enabled = 1
                 `, [reservation_no]);
 
                 //  에러 처리 필요하면 
@@ -503,11 +511,13 @@ const controller = {
                     UPDATE reservations as r
                     SET r.enabled = 0
                     WHERE r.no = ?
+                    AND r.enabled = 1
                 `, reservation_no);
                 await connection.query(`
-                    UPDATE products 
+                    UPDATE products as p
                     SET rest_quantity = rest_quantity + ?
                     WHERE no = ?
+                    AND p.enabled = 1
                 `, [
                     result[0].total_purchase_quantity,
                     result[0].product_no
@@ -547,6 +557,8 @@ const controller = {
                 JOIN shops as s
                 ON p.shop_no = s.no
                 WHERE actual_quantity IS NULL
+                AND p.enabled = 1
+                AND s.enabled = 1
                 ORDER BY p.expiry_datetime ASC;
             `);
             next({
@@ -568,7 +580,9 @@ const controller = {
             const [verifyAllConfirmed] = await pool.query(`
                 SELECT *
                 FROM reservations as r
-                WHERE r.product_no = ? AND r.status = 'pre_confirmed' AND r.enabled = 1
+                WHERE r.product_no = ? 
+                AND r.status = 'pre_confirmed' 
+                AND r.enabled = 1
             `, [product_no])
 
             if (verifyAllConfirmed.length > 0){
@@ -746,10 +760,12 @@ const controller = {
                     await connection.query(`
                         UPDATE reservations as r
                         SET r.status = "waiting"
-                        WHERE r.no = ?;
+                        WHERE r.no = ?
+                        AND r.enabled = 1;
                         UPDATE products as p
                         SET p.actual_quantity = ?
-                        Where p.no = ?;
+                        WHERE p.no = ?
+                        AND p.enabled = 1;
                     `, [r.reservation_no, actual_quantity, product_no]);
                 }
 
@@ -851,6 +867,11 @@ const controller = {
             JOIN shops AS s
             ON o.shop_no = s.no
             WHERE o.status = "pre_pickup" OR o.status = "pre_return"
+            AND o.enabled = 1
+            AND r.enabled = 1
+            AND u.enabled = 1
+            AND p.enabled = 1
+            AND s.enabled = 1
             `);
 
             next(orderResult);
@@ -880,7 +901,10 @@ const controller = {
                     JOIN user_mvp AS u
                     ON o.user_mvp_no = u.no
                     WHERE o.no = ? 
-                    AND (o.status = 'pre_pickup' OR o.status = 'pre_return');
+                    AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
+                    AND o.enabled = 1
+                    AND r.enabled = 1
+                    AND u.enabled = 1;
                 `, [order_no]);
 
                 const order_status = orderResult[0].status; // 상태 추출
@@ -892,9 +916,10 @@ const controller = {
                 const update_status = order_status === 'pre_pickup' ? 'pickup' : 'return';
 
                 await connection.query(`
-                    UPDATE orders 
+                    UPDATE orders as o
                     SET status = ?
-                    WHERE no = ? 
+                    WHERE no = ?
+                    AND o.enabled = 1
                 `, [update_status, order_no]);
 
                 const [reservationTemp] = await connection.query(`
@@ -902,6 +927,7 @@ const controller = {
                     FROM orders AS o
                     WHERE o.reservation_no = ? 
                     AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
+                    AND o.enabled = 1
                 `, [reservation_no]);
 
                 const reservationCount = reservationTemp.length;
@@ -929,9 +955,10 @@ const controller = {
 
                 // 픽업 대기나 환급 대기가 더 이상 없는 상황(예약 종료 처리)
                 await connection.query(`
-                    UPDATE reservations 
+                    UPDATE reservations as r
                     SET status = 'done'
                     WHERE no = ? 
+                    AND r.enabled = 1
                 `, [reservation_no]);
 
                 // 예약 종료가 되지 않은 상품이 있는지 확인
@@ -940,6 +967,7 @@ const controller = {
                     FROM reservations AS r
                     WHERE r.product_no = ? 
                     AND r.status != 'done'
+                    AND r.enabled = 1
                 `, [product_no]);
 
                 if (productTemp.length > 0) {
@@ -949,9 +977,10 @@ const controller = {
 
                 // 상품 마감 처리
                 await connection.query(`
-                    UPDATE products 
+                    UPDATE products as p
                     SET status = 'done'
                     WHERE no = ? 
+                    AND p.enabled = 1
                 `, [product_no]);
 
                 await connection.commit();
