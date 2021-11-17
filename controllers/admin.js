@@ -565,6 +565,16 @@ const controller = {
             let pickupArray = [];
             let returnArray = [];
 
+            const [verifyAllConfirmed] = await pool.query(`
+                SELECT *
+                FROM reservations as r
+                WHERE r.product_no = ? AND r.status = 'pre_confirmed'
+            `, [product_no])
+
+            if (verifyAllConfirmed.length > 0){
+                throw err(400, "승인되지 않은 예약이 있습니다.");
+            }
+
             const [reservationResult] = await pool.query(`
                 SELECT
                 r.no AS reservation_no,
