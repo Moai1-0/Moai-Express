@@ -2,6 +2,7 @@ const err = require('http-errors');
 const dayjs = require('dayjs');
 const timezone = require('dayjs/plugin/timezone');
 const utc = require('dayjs/plugin/utc');
+
 dayjs.extend(utc);
 dayjs.extend(timezone);
 require('dayjs/locale/ko');
@@ -13,6 +14,7 @@ const { encodeToken } = require('../utils/token');
 const { send, sendKakaoMessage } = require('../utils/solapi');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const { Users, Shops, sequelize } = require('../models');
+const { sendSlack } = require('../utils/slack')
 
 const template = require('../config/template');
 
@@ -561,6 +563,7 @@ const controller = {
                 AND s.enabled = 1
                 ORDER BY p.expiry_datetime ASC;
             `);
+
             next({
                 productList: productsResult
             });
@@ -807,6 +810,7 @@ const controller = {
                     });
 
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+
                 }
 
                 for (let r of returnArray) {
@@ -955,6 +959,7 @@ const controller = {
                             }
                         });
                         if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+
                     }
                     next({ message: "입력이 완료되었습니다" });
                 }
