@@ -545,7 +545,7 @@ const controller = {
                 p.discounted_price
                 FROM products as p
                 JOIN shops as s
-                ON p.no = s.no
+                ON p.shop_no = s.no
                 WHERE actual_quantity IS NULL
                 ORDER BY p.expiry_datetime ASC;
             `);
@@ -564,6 +564,16 @@ const controller = {
 
             let pickupArray = [];
             let returnArray = [];
+
+            const [verifyAllConfirmed] = await pool.query(`
+                SELECT *
+                FROM reservations as r
+                WHERE r.product_no = ? AND r.status = 'pre_confirmed'
+            `, [product_no])
+
+            if (verifyAllConfirmed.length > 0){
+                throw err(400, "승인되지 않은 예약이 있습니다.");
+            }
 
             const [reservationResult] = await pool.query(`
                 SELECT
