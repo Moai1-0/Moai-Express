@@ -603,7 +603,9 @@ const controller = {
                 r.status,
                 p.expected_quantity,
                 p.return_price,
-                s.name AS shop_name
+                s.name AS shop_name,
+                s.tel AS shop_tel,
+                CONCAT(s.road_address, ' ', s.road_detail_address) AS shop_address
                 FROM reservations AS r
                 JOIN products AS p
                 ON r.product_no = p.no 
@@ -632,6 +634,8 @@ const controller = {
                 const expected_quantity = reservationResult[0].expected_quantity;
                 const return_price = reservationResult[0].return_price;
                 const shop_name = reservationResult[0].shop_name;
+                const shop_tel = reservationResult[0].shop_tel;
+                const shop_address = reservationResult[0].shop_address;
 
                 if (expected_quantity < actual_quantity) {
                     throw err(400, "예상 재고보다 입력된 재고량이 더 많습니다");
@@ -650,10 +654,10 @@ const controller = {
                         p.name AS product_name,
                         p.pickup_start_datetime,
                         p.pickup_end_datetime
-                        FROM reservations as r
-                        JOIN products as p
+                        FROM reservations AS r
+                        JOIN products AS p
                         ON r.product_no = p.no
-                        JOIN user_mvp as u
+                        JOIN user_mvp AS u
                         ON r.user_mvp_no = u.no
                         WHERE r.no = ?
                         AND r.enabled = 1
@@ -792,7 +796,9 @@ const controller = {
                             total_purchase_quantity,
                             pickup_start_datetime,
                             pickup_end_datetime,
-                            shop_name
+                            shop_name,
+                            shop_tel,
+                            shop_address
                         }),
                         type: `CTA`,
                         kakaoOptions: {
