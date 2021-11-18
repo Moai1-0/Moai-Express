@@ -21,6 +21,13 @@ const template = {
 
         return `[어비] 예약완료 안내\n\n${depositor_name}님의 예약이 확정되었습니다.\n\n아래 예약 정보를 확인해 주세요.\n\n- 제품명 : ${product_name}\n- 가게명 : ${shop_name}\n- 수량 : ${total_purchase_quantity}개\n- 금액 : ${total_purchase_price}원\n- 예약 마감 시간 : ${expiry_datetime}\n\n예약 마감 시간 이후 수령/환급 안내 메세지를 발송해드리겠습니다.\n\n1) 수령 시\n[수령 가능 시간]\n${pickup_start_datetime} ~ ${pickup_end_datetime}\n[수령지 주소]\n${shop_address}\n[가게 전화번호]\n${shop_tel}\n\n2) 환급 시\n[환급금]\n개당 ${return_price}원`;
     },
+    cancelReservation(options) {
+        const {
+            depositor_name,
+            product_name
+        } = options;
+        return `[어비] 예약취소 안내\\n\\n${depositor_name}님, [${product_name}] 상품 예약이 취소되었습니다.\\n\\n홈페이지에서 재예약 부탁드립니다.\\n\\n오늘도 어비를 이용해주셔서 감사합니다.\\n\\n문의사항이 있을 시 메세지를 보내주시면 신속하게 답장드리겠습니다.`
+    },
     confirmReturn(options) {
         const {
             depositor_name, 

@@ -11,7 +11,7 @@ async function send(params = {}) {
   } catch (e) {
     // console.log('statusCode:', e.statusCode);
     // console.log('errorCode:', e.error.errorCode);
-    // console.log('errorMessage:', e.error.errorMessage);
+    console.log('errorMessage:', e.error.errorMessage);
     return e;
   }
 }
@@ -20,7 +20,9 @@ async function sendKakaoMessage(message, agent = {}) {
   try {
     await Group.sendSimpleMessage(message, agent);
   } catch (e) {
-    console.log(e);
+    // console.log('statusCode:', e.statusCode);
+    // console.log('errorCode:', e.error.errorCode);
+    console.log('errorMessage:', e.error.errorMessage);
     return null;
   }
 }
