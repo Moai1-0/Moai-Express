@@ -16,6 +16,7 @@ const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const { Users, Shops, sequelize } = require('../models');
 const { sendSlack } = require('../utils/slack')
 
+const solapi = require('../config').solapi;
 const template = require('../config/template');
 
 const PAGINATION_COUNT = 10;
@@ -576,7 +577,7 @@ const controller = {
         try {
             const actual_quantity = param(body, "actual_quantity");
             const product_no = param(body, "product_no");
-
+            // console.log(process.env.SOLAPI_CONFIRM_PICKUP_TEMPLATE, "ENV@@");
             let pickupArray = [];
             let returnArray = [];
 
@@ -791,24 +792,48 @@ const controller = {
                     } = p;
 
                     const kakaoResult = await send({
-                        to: `${phone_number}`,
-                        from: `01043987759`,
-                        kakaoOptions: {
-                            pfId: require('../config').solapi.pfId,
-                            templateId: process.env.SOLAPI_CONFIRM_PICKUP_TEMPLATE,
-                            variables: {
-                                '#{예금자명}': `${depositor_name}`,
-                                '#{상품명}': `${product_name}`,
-                                '#{구매수량}': `${total_purchase_quantity}`,
-                                '#{수령시작시간}': `${pickup_start_datetime}`,
-                                '#{수령마감시간}': `${pickup_end_datetime}`,
-                                '#{가게명}': `${shop_name}`,
-                                '#{가게주소}': `${shop_address}`,
-                                '#{가게전화번호}': `${shop_tel}`
+                        messages: [
+                            {
+                                to: `${phone_number}`,
+                                from: `01043987759`,
+                                kakaoOptions: {
+                                    pfId: solapi.pfId,
+                                    templateId: solapi.confirmPickupTemplate,
+                                    variables: {
+                                        '#{예금자명}': `${depositor_name}`,
+                                        '#{상품명}': `${product_name}`,
+                                        '#{구매수량}': `${total_purchase_quantity}`,
+                                        '#{수령시작시간}': `${pickup_start_datetime}`,
+                                        '#{수령마감시간}': `${pickup_end_datetime}`,
+                                        '#{가게명}': `${shop_name}`,
+                                        '#{가게주소}': `${shop_address}`,
+                                        '#{가게전화번호}': `${shop_tel}`
+                                    }
+        
+                                }
                             }
-
-                        }
+                        ]
                     });
+
+                    // const kakaoResult = await send({
+                    //     to: `${phone_number}`,
+                    //     from: `01043987759`,
+                    //     kakaoOptions: {
+                    //         pfId: solapi.pfId,
+                    //         templateId: solapi.confirmPickupTemplate,
+                    //         variables: {
+                    //             '#{예금자명}': `${depositor_name}`,
+                    //             '#{상품명}': `${product_name}`,
+                    //             '#{구매수량}': `${total_purchase_quantity}`,
+                    //             '#{수령시작시간}': `${pickup_start_datetime}`,
+                    //             '#{수령마감시간}': `${pickup_end_datetime}`,
+                    //             '#{가게명}': `${shop_name}`,
+                    //             '#{가게주소}': `${shop_address}`,
+                    //             '#{가게전화번호}': `${shop_tel}`
+                    //         }
+
+                    //     }
+                    // });
 
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
@@ -926,21 +951,38 @@ const controller = {
                         total_return_price
                     } = r;
 
-                    const kakaoResult = await send({
-                        to: `${phone_number}`,
-                        from: `01043987759`,
-                        kakaoOptions: {
-                            pfId: require('../config').solapi.pfId,
-                            templateId: process.env.SOLAPI_CONFIRM_RETURN_TEMPLATE,
-                            variables: {
-                                '#{예금자명}': `${depositor_name}`,
-                                '#{상품명}': `${product_name}`,
-                                '#{구매수량}': `${total_purchase_quantity}`,
-                                '#{가게명}': `${shop_name}`,
-                                '#{총환급금}': `${total_return_price}`
-                            }
+                    // const kakaoResult = await send({
+                    //     to: `${phone_number}`,
+                    //     from: `01043987759`,
+                    //     kakaoOptions: {
+                    //         pfId: solapi.pfId,
+                    //         templateId: solapi.confirmReturnTemplate,
+                    //         variables: {
+                    //             '#{예금자명}': `${depositor_name}`,
+                    //             '#{상품명}': `${product_name}`,
+                    //             '#{구매수량}': `${total_purchase_quantity}`,
+                    //             '#{가게명}': `${shop_name}`,
+                    //             '#{총환급금}': `${total_return_price}`
+                    //         }
+                    //     }
+                    // });
 
-                        }
+                    const kakaoResult = await send({
+                        messages: [{
+                            to: `${phone_number}`,
+                            from: `01043987759`,
+                            kakaoOptions: {
+                                pfId: solapi.pfId,
+                                templateId: solapi.confirmReturnTemplate,
+                                variables: {
+                                    '#{예금자명}': `${depositor_name}`,
+                                    '#{상품명}': `${product_name}`,
+                                    '#{구매수량}': `${total_purchase_quantity}`,
+                                    '#{가게명}': `${shop_name}`,
+                                    '#{총환급금}': `${total_return_price}`
+                                }
+                            }
+                        }]
                     });
 
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
