@@ -54,7 +54,6 @@ const controller = {
         try {
             // const region_no = param(query, 'region_no', 0); // 0:광장동
             const sort = param(query, 'sort', 'impending');
-            console.log(sort, "SORT_FIRST_@@@");
             condition.contains(sort, ['impending', 'descending', 'discount_rate']);
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
@@ -151,7 +150,7 @@ const controller = {
             `, [count, offset]);
             
             next({
-                total_count: result[0].total_count,
+                total_count: result[0][0].total_count,
                 products: result[1].map((product) => ({
                     ...product,
                     regular_price: product.regular_price.toLocaleString('ko-KR'),
