@@ -458,6 +458,70 @@ const controller = {
                     AND r.enabled = 1
                 `, reservation_no);
 
+                const [result] = await connection.query (`
+                    SELECT 
+                    r.depositor_name,
+                    u.phone_number,
+                    p.name as 'product_name',
+                    r.total_purchase_quantity,
+                    r.total_purchase_price,
+                    p.expiry_datetime,
+                    p.pickup_start_datetime,
+                    p.pickup_end_datetime,
+                    p.return_price,
+                    s.region_address,
+                    s.tel,
+                    s.name as 'shop_name'
+                    FROM reservations as r
+                    JOIN shops as s
+                    ON r.shop_no = s.no
+                    JOIN products as p
+                    ON r.product_no = p.no
+                    JOIN user_mvp as u
+                    ON r.user_mvp_no = u.no
+                    WHERE r.no = ?
+                `, [reservation_no])
+
+                const depositor_name = result[0].depositor_name
+                const phone_number = result[0].phone_number
+                const product_name = result[0].product_name
+                const total_purchase_quantity = result[0].total_purchase_quantity
+                const total_purchase_price = result[0].total_purchase_price
+                const expiry_datetime = dayjs(result[0].expiry_datetime).format(`YYYY-MM-DD(ddd) a h:mm`);
+                const pickup_start_datetime = dayjs(result[0].pickup_start_datetime).format(`YYYY-MM-DD(ddd) a h:mm`)
+                const pickup_end_datetime = dayjs(result[0].pickup_end_datetime).format(`YYYY-MM-DD(ddd) a h:mm`)
+                const return_price = result[0].return_price
+                const region_address = result[0].region_address
+                const shop_name = result[0].shop_name
+                const tel = result[0].tel
+
+                const kakaoResult = await send( {
+                    messages: [{
+                        to: `${phone_number}`,
+                        from: `01043987759`,
+                        kakaoOptions: {
+                            pfId: solapi.pfId,
+                            templateId: solapi.reservationConfirmTemplate,
+                            variables: {
+                                '#{예금주명}': `${depositor_name}`,
+                                '#{상품명}': `${product_name}`,
+                                '#{가게명}': `${shop_name}`,
+                                '#{총구매수량}': `${total_purchase_quantity}`,
+                                '#{총구매가격}': `${total_purchase_price}`,
+                                '#{예약마감시간}': `${expiry_datetime}`,
+                                '#{수령시작시간}': `${pickup_start_datetime}`,
+                                '#{수령마감시간}': `${pickup_end_datetime}`,
+                                '#{가게주소}': `${region_address}`,
+                                '#{가게전화번호}': `${tel}`,
+                                '#{개당환급금}': `${return_price}`
+                            }
+                        }
+                    }]
+                })
+
+                if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+
+
                 // const [temp] = await connection.query(`
                 //     SELECT
                 //     r.depositor_name,
@@ -501,12 +565,25 @@ const controller = {
             try {
                 await connection.beginTransaction();
                 const [result] = await connection.query(`
-                    SELECT * 
-                    FROM reservations
+                    SELECT 
+                    r.total_purchase_quantity, 
+                    r.product_no, 
+                    r.depositor_name, 
+                    u.phone_number,
+                    p.name as 'product_name' 
+                    FROM reservations as r
+                    JOIN products as p
+                    ON r.product_no = p.no
+                    JOIN user_mvp as u
+                    ON r.user_mvp_no = u.no
                     WHERE
-                    no = ?
+                    r.no = ?
                     AND r.enabled = 1
                 `, [reservation_no]);
+
+                const depositor_name = result[0].depositor_name
+                const product_name = result[0].product_name
+                const phone_number = result[0].phone_number
 
                 //  에러 처리 필요하면 
 
@@ -526,7 +603,22 @@ const controller = {
                     result[0].product_no
                 ]);
 
+                const kakaoResult = await send( {
+                    messages: [{
+                        to: `${phone_number}`,
+                        from: `01043987759`,
+                        kakaoOptions: {
+                            pfId: solapi.pfId,
+                            templateId: solapi.reservationCancelTemplate,
+                            variables: {
+                                '#{예금주명}': `${depositor_name}`,
+                                '#{상품명}': `${product_name}`
+                            }
+                        }
+                    }]
+                })
 
+                if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
                 await connection.commit();
 
@@ -815,132 +907,10 @@ const controller = {
                         ]
                     });
 
-                    // const kakaoResult = await send({
-                    //     to: `${phone_number}`,
-                    //     from: `01043987759`,
-                    //     kakaoOptions: {
-                    //         pfId: solapi.pfId,
-                    //         templateId: solapi.confirmPickupTemplate,
-                    //         variables: {
-                    //             '#{예금자명}': `${depositor_name}`,
-                    //             '#{상품명}': `${product_name}`,
-                    //             '#{구매수량}': `${total_purchase_quantity}`,
-                    //             '#{수령시작시간}': `${pickup_start_datetime}`,
-                    //             '#{수령마감시간}': `${pickup_end_datetime}`,
-                    //             '#{가게명}': `${shop_name}`,
-                    //             '#{가게주소}': `${shop_address}`,
-                    //             '#{가게전화번호}': `${shop_tel}`
-                    //         }
-
-                    //     }
-                    // });
-
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
                 }
 
-                // for (let p of pickupArray) {
-                //     const {
-                //         phone_number,
-                //         depositor_name,
-                //         product_name,
-                //         total_purchase_quantity,
-                //         pickup_start_datetime,
-                //         pickup_end_datetime,
-                //     } = p;
-
-                //     const kakaoResult = await sendKakaoMessage({
-                //         to: `${phone_number}`,
-                //         from: `01043987759`,
-                //         text: template.confirmPickUp({
-                //             depositor_name,
-                //             product_name,
-                //             total_purchase_quantity,
-                //             pickup_start_datetime,
-                //             pickup_end_datetime,
-                //             shop_name,
-                //             shop_tel,
-                //             shop_address
-                //         }),
-                //         type: `CTA`,
-                //         kakaoOptions: {
-                //             "pfId": require('../config').solapi.pfId
-                //         }
-                //     });
-
-                //     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
-
-                // }
-
-                // const sendPickup = pickupArray.map( obj => {
-                //     const {
-                //         phone_number,
-                //         depositor_name,
-                //         product_name,
-                //         total_purchase_quantity,
-                //         pickup_start_datetime,
-                //         pickup_end_datetime,
-                //     } = obj
-
-                //     return {
-                //         to: `${phone_number}`,
-                //         from: `01043987759`,
-                //         text: template.confirmPickUp({
-                //             depositor_name,
-                //             product_name,
-                //             total_purchase_quantity,
-                //             pickup_start_datetime,           
-                //             pickup_end_datetime,
-                //             shop_name,
-                //             shop_tel,
-                //             shop_address
-                //         }),
-                //         type: `ATA`,
-                //         kakaoOptions: {
-                //             "pfId": require('../config').solapi.pfId,
-                //             "templateId": process.env.SOLAPI_CONFIRM_PICKUP_TEMPLATE
-                //         }
-                //     }
-
-                // })
-
-                // const kakaoPickup = await send({messages: sendPickup});
-
-                // if (kakaoPickup === null) throw err(400, '친구톡 전송에 실패했습니다.');
-
-                // const sendReturn = returnArray.map( obj => {
-                //     const {
-                //         phone_number,
-                //         depositor_name,
-                //         product_name,
-                //         total_purchase_quantity,
-                //         total_return_price
-                //     } = obj
-
-                //     return {
-                        // to: `${phone_number}`,
-                        // from: `01043987759`,
-                        // text: template.confirmReturn({
-                        //     depositor_name,
-                        //     product_name,
-                        //     total_purchase_quantity,
-                        //     shop_name,
-                        //     total_return_price
-                        // }),
-                        // type: `ATA`,
-                //         kakaoOptions: {
-                //             pfId: require('../config').solapi.pfId,
-                //             templateId: process.env.SOLAPI_CONFIRM_RETURN_TEMPLATE,
-                //             variables: {}
-                //         }
-                
-                //     }
-
-                // })
-
-                // const kakaoReturn = await send({messages: sendReturn});
-
-                // if (kakaoReturn === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
                 for (let r of returnArray) {
                     const {
@@ -950,22 +920,6 @@ const controller = {
                         total_purchase_quantity,
                         total_return_price
                     } = r;
-
-                    // const kakaoResult = await send({
-                    //     to: `${phone_number}`,
-                    //     from: `01043987759`,
-                    //     kakaoOptions: {
-                    //         pfId: solapi.pfId,
-                    //         templateId: solapi.confirmReturnTemplate,
-                    //         variables: {
-                    //             '#{예금자명}': `${depositor_name}`,
-                    //             '#{상품명}': `${product_name}`,
-                    //             '#{구매수량}': `${total_purchase_quantity}`,
-                    //             '#{가게명}': `${shop_name}`,
-                    //             '#{총환급금}': `${total_return_price}`
-                    //         }
-                    //     }
-                    // });
 
                     const kakaoResult = await send({
                         messages: [{
@@ -1088,26 +1042,30 @@ const controller = {
                 `, [reservation_no]);
 
                 const reservationCount = reservationTemp.length;
+        
+                if (update_status === 'return') {
+                    const kakaoResult = await send({
+                        messages: [{
+                            to: `${phone_number}`,
+                            from: `01043987759`,
+                            kakaoOptions: {
+                                pfId: solapi.pfId,
+                                templateId: solapi.returnCompleteTemplate,
+                                variables: {
+                                    '#{예금자명}': `${depositor_name}`,
+                                    '#{총환급금}': `${total_return_price}`
+                                }
+                            }
+                        }]
+                    });
+                    if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+                
+                }
 
                 // 픽업 대기나 환급 대기가 있는 상황
                 if (reservationCount > 0) {
                     await connection.commit();
-                    if (update_status === 'return') {
-                        const kakaoResult = await sendKakaoMessage({
-                            to: `${phone_number}`,
-                            from: `01043987759`,
-                            text: template.confirmReturnIsDone({
-                                depositor_name,
-                                total_return_price
-                            }),
-                            type: `CTA`,
-                            kakaoOptions: {
-                                "pfId": require('../config').solapi.pfId
-                            }
-                        });
-                        if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
-
-                    }
+                    
                     next({ message: "입력이 완료되었습니다" });
                 }
 

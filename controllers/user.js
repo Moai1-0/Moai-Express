@@ -19,6 +19,7 @@ const { scheduleJob } = require('../utils/scheduler');
 
 const template = require('../config/template');
 const bankCode = require('../config/bankCode.json');
+const solapi = require('../config').solapi
 
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
@@ -1727,17 +1728,19 @@ const controller = {
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
 
-                const kakaoResult = await sendKakaoMessage({
-                    to: `${phone_number}`,
-                    from: `01043987759`,
-                    text: template.completeReservationApplication({
-                        depositor_name,
-                        total_purchase_price,
-                    }),
-                    type: `CTA`,
-                    kakaoOptions: {
-                        "pfId": require('../config').solapi.pfId
-                    }
+                const kakaoResult = await send({
+                    messages: [{
+                        to: `${phone_number}`,
+                        from: `01043987759`,
+                        kakaoOptions: {
+                            pfId: solapi.pfId,
+                            templateId: solapi.reservationCompleteTemplate,
+                            variables: {
+                                '#{예금주명}': `${depositor_name}`,
+                                '#{총구매가격}': `${total_purchase_price}`
+                            }
+                        }
+                    }]
                 });
 
                 if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
