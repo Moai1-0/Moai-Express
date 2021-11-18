@@ -185,6 +185,7 @@ const controller = {
                 s.latitude,
                 s.longitude,
                 p.expected_quantity,
+                p.actual_quantity,
                 p.rest_quantity,
                 p.regular_price,
                 p.discounted_price,
@@ -215,7 +216,7 @@ const controller = {
             `, [product_no, product_no]);
 
             if (result.length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
-
+            
             next({
                 ...result[0],
                 discount_rate: parseFloat(result[0].discount_rate),
