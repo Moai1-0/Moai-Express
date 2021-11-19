@@ -14,7 +14,7 @@ const { encodeToken } = require('../utils/token');
 const { send, sendKakaoMessage } = require('../utils/solapi');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const { Users, Shops, sequelize } = require('../models');
-const { sendSlack } = require('../utils/slack')
+const { sendSlack } = require('../utils/slack');
 
 const solapi = require('../config').solapi;
 const template = require('../config/template');
@@ -458,7 +458,7 @@ const controller = {
                     AND r.enabled = 1
                 `, reservation_no);
 
-                const [result] = await connection.query (`
+                const [result] = await connection.query(`
                     SELECT 
                     r.depositor_name,
                     u.phone_number,
@@ -480,22 +480,22 @@ const controller = {
                     JOIN user_mvp as u
                     ON r.user_mvp_no = u.no
                     WHERE r.no = ?
-                `, [reservation_no])
+                `, [reservation_no]);
 
-                const depositor_name = result[0].depositor_name
-                const phone_number = result[0].phone_number
-                const product_name = result[0].product_name
-                const total_purchase_quantity = result[0].total_purchase_quantity
-                const total_purchase_price = result[0].total_purchase_price
+                const depositor_name = result[0].depositor_name;
+                const phone_number = result[0].phone_number;
+                const product_name = result[0].product_name;
+                const total_purchase_quantity = result[0].total_purchase_quantity;
+                const total_purchase_price = result[0].total_purchase_price;
                 const expiry_datetime = dayjs(result[0].expiry_datetime).format(`YYYY-MM-DD(ddd) a h:mm`);
-                const pickup_start_datetime = dayjs(result[0].pickup_start_datetime).format(`YYYY-MM-DD(ddd) a h:mm`)
-                const pickup_end_datetime = dayjs(result[0].pickup_end_datetime).format(`YYYY-MM-DD(ddd) a h:mm`)
-                const return_price = result[0].return_price
-                const region_address = result[0].region_address
-                const shop_name = result[0].shop_name
-                const tel = result[0].tel
+                const pickup_start_datetime = dayjs(result[0].pickup_start_datetime).format(`YYYY-MM-DD(ddd) a h:mm`);
+                const pickup_end_datetime = dayjs(result[0].pickup_end_datetime).format(`YYYY-MM-DD(ddd) a h:mm`);
+                const return_price = result[0].return_price;
+                const region_address = result[0].region_address;
+                const shop_name = result[0].shop_name;
+                const tel = result[0].tel;
 
-                const kakaoResult = await send( {
+                const kakaoResult = await send({
                     messages: [{
                         to: `${phone_number}`,
                         from: `01043987759`,
@@ -517,7 +517,7 @@ const controller = {
                             }
                         }
                     }]
-                })
+                });
 
                 if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
@@ -581,9 +581,9 @@ const controller = {
                     AND r.enabled = 1
                 `, [reservation_no]);
 
-                const depositor_name = result[0].depositor_name
-                const product_name = result[0].product_name
-                const phone_number = result[0].phone_number
+                const depositor_name = result[0].depositor_name;
+                const product_name = result[0].product_name;
+                const phone_number = result[0].phone_number;
 
                 //  에러 처리 필요하면 
 
@@ -603,7 +603,7 @@ const controller = {
                     result[0].product_no
                 ]);
 
-                const kakaoResult = await send( {
+                const kakaoResult = await send({
                     messages: [{
                         to: `${phone_number}`,
                         from: `01043987759`,
@@ -616,14 +616,14 @@ const controller = {
                             }
                         }
                     }]
-                })
+                });
 
                 if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
                 await connection.commit();
 
 
-                next({ message: "이체 확인 상태로 변경되었습니다." });
+                next({ message: "예약 취소 되었습니다." });
             } catch (e) {
                 await connection.rollback();
                 next(e);
@@ -679,9 +679,9 @@ const controller = {
                 WHERE r.product_no = ? 
                 AND r.status = 'pre_confirmed' 
                 AND r.enabled = 1
-            `, [product_no])
+            `, [product_no]);
 
-            if (verifyAllConfirmed.length > 0){
+            if (verifyAllConfirmed.length > 0) {
                 throw err(400, "승인되지 않은 예약이 있습니다.");
             }
 
@@ -901,7 +901,7 @@ const controller = {
                                         '#{가게주소}': `${shop_address}`,
                                         '#{가게전화번호}': `${shop_tel}`
                                     }
-        
+
                                 }
                             }
                         ]
@@ -1042,7 +1042,7 @@ const controller = {
                 `, [reservation_no]);
 
                 const reservationCount = reservationTemp.length;
-        
+
                 if (update_status === 'return') {
                     const kakaoResult = await send({
                         messages: [{
@@ -1059,13 +1059,13 @@ const controller = {
                         }]
                     });
                     if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
-                
+
                 }
 
                 // 픽업 대기나 환급 대기가 있는 상황
                 if (reservationCount > 0) {
                     await connection.commit();
-                    
+
                     next({ message: "입력이 완료되었습니다" });
                 }
 

@@ -49,9 +49,13 @@ app.use((req, res, next) => {
     next(err(404, '요청하신 페이지를 찾을 수 없습니다.'));
 });
 
+const { sendSlack } = require('./utils/slack');
+
 app.use((data, req, res, next) => {
     if (data instanceof Error) {
-        console.log(data);
+        if (data.status == 400 || data.status == 500) {
+            sendSlack(data, 'dev-에러');
+        }
         return res.status(data.status || 500).json({
             code: data.status,
             message: data.message

@@ -16,10 +16,11 @@ const mailer = require('../utils/mailer');
 const { generateRandomCode } = require('../utils/random');
 const { send, sendKakaoMessage } = require('../utils/solapi');
 const { scheduleJob } = require('../utils/scheduler');
+const { sendSlack } = require('../utils/slack');
 
 const template = require('../config/template');
 const bankCode = require('../config/bankCode.json');
-const solapi = require('../config').solapi
+const solapi = require('../config').solapi;
 
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
@@ -149,7 +150,7 @@ const controller = {
                 ORDER BY RANK, ${sort === 'impending' ? 'expiry_datetime ASC' : sort === 'descending' ? 'created_datetime DESC' : 'discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
-            
+
             next({
                 total_count: result[0][0].total_count,
                 products: result[1].map((product) => ({
@@ -216,7 +217,7 @@ const controller = {
             `, [product_no, product_no]);
 
             if (result.length < 1) throw err(404, `상품이 삭제되었거나 존재하지 않습니다.`);
-            
+
             next({
                 ...result[0],
                 discount_rate: parseFloat(result[0].discount_rate),
@@ -1752,7 +1753,7 @@ const controller = {
                         total_purchase_price,
                     })
                 });
-
+                sendSlack(`예약이 왔네 예약이 왔어~ \n 핸드폰번호: ${phone_number} \n 예약개수: ${total_purchase_quantity}\n 총금액: ${total_purchase_price} \n 이체승인해주세요~ `, 'dev-소비자예약');
                 await connection.commit();
                 next({ message: '예약됐습니다' });
             } catch (e) {
