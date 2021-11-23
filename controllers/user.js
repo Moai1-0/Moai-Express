@@ -212,6 +212,7 @@ const controller = {
                 p.name AS product_name,
                 p.shop_no,
                 s.name AS shop_name,
+                s.link AS shop_link,
                 s.shop_image,
                 s.tel,
                 s.road_address,
