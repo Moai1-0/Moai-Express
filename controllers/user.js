@@ -95,6 +95,7 @@ const controller = {
                     p.created_datetime,
                     s.no AS shop_no,
                     s.name AS shop_name,
+                    s.shop_image,
                     i.path
                     FROM products AS p
                     JOIN shops AS s
@@ -128,6 +129,7 @@ const controller = {
                     p.created_datetime,
                     s.no AS shop_no,
                     s.name AS shop_name,
+                    s.shop_image,
                     i.path
                     FROM products AS p
                     JOIN shops AS s
@@ -158,6 +160,7 @@ const controller = {
                     regular_price: product.regular_price.toLocaleString('ko-KR'),
                     discounted_price: product.discounted_price.toLocaleString('ko-KR'),
                     return_price: product.return_price.toLocaleString('ko-KR'),
+                    shop_image: BASE_URL + product.shop_image,
                     path: BASE_URL + product.path,
                     discount_rate: parseFloat(product.discount_rate),
                     raw_expiry_datetime: product.expiry_datetime,
@@ -178,6 +181,7 @@ const controller = {
                 p.name AS product_name,
                 p.shop_no,
                 s.name AS shop_name,
+                s.shop_image,
                 s.tel,
                 s.road_address,
                 s.road_detail_address,
@@ -224,6 +228,7 @@ const controller = {
                 paths: result[0].paths ? (result[0].paths.split(',')).map((path) => (
                     BASE_URL + path
                 )) : [],
+                shop_image: BASE_URL + result[0].shop_image,
                 regular_price: result[0].regular_price.toLocaleString('ko-KR'),
                 discounted_price: result[0].discounted_price.toLocaleString('ko-KR'),
                 return_price: result[0].return_price.toLocaleString('ko-KR'),
