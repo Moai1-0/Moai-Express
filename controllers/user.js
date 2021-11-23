@@ -76,9 +76,7 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                WHERE p.actual_quantity IS NULL
-                AND p.expiry_datetime - NOW() > 0
-                AND p.enabled = 1
+                WHERE p.enabled = 1
                 AND s.enabled = 1
                 ;
                 
@@ -146,6 +144,39 @@ const controller = {
                     WHERE p.actual_quantity IS NULL
                     AND p.rest_quantity <= 0
                     AND p.expiry_datetime - NOW() > 0
+                    AND p.enabled = 1
+                    AND s.enabled = 1
+                )
+                UNION
+                (SELECT
+                    3 AS rank,
+                    p.no AS product_no,
+                    p.name AS product_name,
+                    p.regular_price,
+                    p.discounted_price,
+                    p.discount_rate,
+                    p.return_price,
+                    p.rest_quantity,
+                    p.expiry_datetime,
+                    p.created_datetime,
+                    s.no AS shop_no,
+                    s.name AS shop_name,
+                    s.shop_image,
+                    i.path
+                    FROM products AS p
+                    JOIN shops AS s
+                    ON p.shop_no = s.no
+                    LEFT JOIN (
+                        SELECT
+                        product_no,
+                        path
+                        FROM product_images
+                        WHERE enabled = 1
+                        AND sort = 1
+                    ) AS i
+                    ON p.no = i.product_no
+                    WHERE p.actual_quantity IS NOT NULL
+                    OR p.expiry_datetime - NOW() <= 0
                     AND p.enabled = 1
                     AND s.enabled = 1
                 )
