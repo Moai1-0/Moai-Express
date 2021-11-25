@@ -1706,20 +1706,26 @@ const controller = {
                     AND enabled = 1;
 
                     SELECT
-                    name AS product_name,
+                    p.name AS product_name,
+                    s.name AS shop_name,
                     discounted_price,
                     expected_quantity,
                     rest_quantity,
                     expiry_datetime,
                     expiry_datetime - NOW() AS is_expired
-                    FROM products
-                    WHERE no = ?
-                    AND enabled = 1;
+                    FROM products as p
+                    JOIN shops as s 
+                    ON p.shop_no = s.no
+                    WHERE p.no = ?
+                    AND p.enabled = 1;
                 `, [phone_number, product_no]);
 
                 if (result1[1][0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
                 if (result1[1][0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
                 if (result1[1][0].is_expired < 0) throw err(400, `마감된 상품입니다.`);
+
+                const shop_name = result1[1][0].shop_name
+                const product_name = result1[1][0].product_name
 
                 if (result1[0].length < 1) {
                     const [result] = await connection.query(`
@@ -1786,14 +1792,20 @@ const controller = {
 
                 if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
 
+                const adminMailFormat = template.adminCompleteReservationApplication({
+                    depositor_name,
+                    phone_number,
+                    shop_name,
+                    product_name,
+                    total_purchase_quantity,
+                    total_purchase_price,
+                })
+
                 await mailer.sendMailToAdmins({
                     subject: '예약 알림',
-                    text: template.completeReservationApplication({
-                        depositor_name,
-                        total_purchase_price,
-                    })
+                    text: adminMailFormat
                 });
-                sendSlack(`예약이 왔네 예약이 왔어~ \n 핸드폰번호: ${phone_number} \n 예약개수: ${total_purchase_quantity}\n 총금액: ${total_purchase_price} \n 이체승인해주세요~ `, 'dev-소비자예약');
+                sendSlack(adminMailFormat, 'dev-소비자예약');
                 await connection.commit();
                 next({ message: '예약됐습니다' });
             } catch (e) {

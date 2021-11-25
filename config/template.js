@@ -3,6 +3,12 @@ const template = {
         const {depositor_name, total_purchase_price} = options
         
         return `[어비] 예약신청 안내\n\n${depositor_name}님의 예약 신청이 완료되었습니다.\n\n하성제(모아이)\n신한 110-534-032944\n\n위 계좌로 ${total_purchase_price}원 입금해주시면 예약이 확정됩니다.`;
+        // (상점) 상품명 몇기  depositor_name (전화번)
+    },
+
+    adminCompleteReservationApplication(options) {
+        const {depositor_name, phone_number, shop_name, product_name, total_purchase_quantity,total_purchase_price} = options
+        return `[어비] 예약신청\n예약자: ${depositor_name}(${phone_number})\n상품: (${shop_name}) ${product_name}\n예약개수: ${total_purchase_quantity}\n총금액 ${total_purchase_price}원\n확인 후 이체 승인해주세요`;
     },
     confirmReservation(options) {
         const {
