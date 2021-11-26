@@ -76,7 +76,8 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                WHERE p.enabled = 1
+                WHERE DATE(NOW()) - DATE(p.created_datetime) <= 2
+                AND p.enabled = 1
                 AND s.enabled = 1
                 ;
                 
@@ -178,15 +179,16 @@ const controller = {
                         AND sort = 1
                     ) AS i
                     ON p.no = i.product_no
-                    WHERE p.actual_quantity IS NOT NULL
-                    OR p.expiry_datetime - NOW() <= 0
+                    WHERE (p.actual_quantity IS NOT NULL
+                    OR p.expiry_datetime - NOW() <= 0)
+                    AND DATE(NOW()) - DATE(p.created_datetime) <= 2
                     AND p.enabled = 1
                     AND s.enabled = 1
                 )
                 ORDER BY RANK, ${sort === 'impending' ? 'expiry_datetime ASC' : sort === 'descending' ? 'created_datetime DESC' : 'discount_rate DESC'}
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
-
+            
             next({
                 total_count: result[0][0].total_count,
                 products: result[1].map((product) => ({
