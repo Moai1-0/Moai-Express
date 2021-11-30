@@ -76,7 +76,7 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                WHERE DATE(NOW()) - DATE(p.created_datetime) <= 2
+                WHERE DATE(NOW()) - DATE(p.created_datetime) <= 3
                 AND p.enabled = 1
                 AND s.enabled = 1
                 ;
@@ -181,7 +181,7 @@ const controller = {
                     ON p.no = i.product_no
                     WHERE (p.actual_quantity IS NOT NULL
                     OR p.expiry_datetime - NOW() <= 0)
-                    AND DATE(NOW()) - DATE(p.created_datetime) <= 2
+                    AND DATE(NOW()) - DATE(p.created_datetime) <= 3
                     AND p.enabled = 1
                     AND s.enabled = 1
                 )
