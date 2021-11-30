@@ -967,7 +967,8 @@ const controller = {
             o.purchase_quantity,
             o.purchase_price,
             o.return_price,
-            o.status
+            o.status,
+            r.bank
             FROM orders AS o
             JOIN reservations AS r
             ON o.reservation_no = r.no
