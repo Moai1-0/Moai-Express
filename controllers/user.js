@@ -29,7 +29,7 @@ const authenticationLogApi = require("../db_api/authentication_log_api.js");
 const pointLogApi = require("../db_api/point_log_api");
 
 const PAGINATION_COUNT = 5;
-const BASE_URL = `https://aws-s3-hufsalumnischolarship-test.s3.ap-northeast-2.amazonaws.com`;
+const BASE_URL = require('../config').s3.endPoint;
 
 const controller = {
     async controllerFormat({ user, body, query }, { pool }, next) {
@@ -188,7 +188,7 @@ const controller = {
                 ORDER BY RANK, ${sort === 'impending' ? 'expiry_datetime ASC' : sort === 'descending' ? 'created_datetime DESC' : 'discount_rate DESC'}, product_no DESC
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
-
+            
             next({
                 total_count: result[0][0].total_count,
                 products: result[1].map((product) => ({
