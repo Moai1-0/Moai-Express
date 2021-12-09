@@ -60,7 +60,7 @@ const controller = {
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
-
+            
             const [result] = await pool.query(`
                 SELECT
                 COUNT(*) AS total_count
@@ -185,10 +185,10 @@ const controller = {
                     AND p.enabled = 1
                     AND s.enabled = 1
                 )
-                ORDER BY RANK, ${sort === 'impending' ? 'expiry_datetime ASC' : sort === 'descending' ? 'created_datetime DESC' : 'discount_rate DESC'}
+                ORDER BY RANK, ${sort === 'impending' ? 'expiry_datetime ASC' : sort === 'descending' ? 'created_datetime DESC' : 'discount_rate DESC'}, product_no DESC
                 LIMIT ? OFFSET ?;
             `, [count, offset]);
-            console.log();
+
             next({
                 total_count: result[0][0].total_count,
                 products: result[1].map((product) => ({
