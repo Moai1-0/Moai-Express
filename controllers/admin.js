@@ -724,6 +724,7 @@ const controller = {
                         WHERE p.no = ?
                         AND p.enabled = 1
                     `, [actual_quantity, product_no]);
+                    await connection.commit();
                     next({ message: "예약이 없어 상품 판매가 종료되었습니다." });
                 }
 
