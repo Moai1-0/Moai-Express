@@ -6,19 +6,25 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 require('dayjs/locale/ko');
 dayjs.locale('ko');
+
 const { auth, param, parser, condition } = require('../utils/params');
 const { encodeToken } = require('../utils/token');
 const { genSaltSync, hashSync, compareSync } = require('bcrypt');
 const check = require('../utils/check');
 const fb = require('../utils/firebase');
+const mailer = require('../utils/mailer');
 const { generateRandomCode } = require('../utils/random');
-const { send } = require('../utils/solapi');
+const { send, sendKakaoMessage } = require('../utils/solapi');
 const { scheduleJob } = require('../utils/scheduler');
+const { sendSlack } = require('../utils/slack');
+
+const template = require('../config/template');
 const bankCode = require('../config/bankCode.json');
+const solapi = require('../config').solapi;
 
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
-const reservationLogApi = require("../db_api/reservation_log_api")
+const reservationLogApi = require("../db_api/reservation_log_api");
 const authenticationLogApi = require("../db_api/authentication_log_api.js");
 const pointLogApi = require("../db_api/point_log_api");
 
@@ -48,25 +54,16 @@ const controller = {
     },
     async getProducts({ query }, { pool }, next) {
         try {
-            const region_no = param(query, 'region_no', 0); // 0:광장동
-            const sort = param(query, 'sort', 'descending');
-            condition.contains(sort, ['descending', 'impending', 'discount_rate']);
+            // const region_no = param(query, 'region_no', 0); // 0:광장동
+            const sort = param(query, 'sort', 'impending');
+            condition.contains(sort, ['impending', 'descending', 'discount_rate']);
             const page = Number(param(query, 'page', 0));
             const count = Number(param(query, 'count', PAGINATION_COUNT));
             const offset = count * page;
 
             const [result] = await pool.query(`
                 SELECT
-                p.no AS product_no,
-                p.name AS product_name,
-                p.regular_price,
-                p.discounted_price,
-                p.discount_rate,
-                p.return_price,
-                p.expiry_datetime,
-                s.no AS shop_no,
-                s.name AS shop_name,
-                i.path
+                COUNT(*) AS total_count
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
@@ -79,19 +76,127 @@ const controller = {
                     AND sort = 1
                 ) AS i
                 ON p.no = i.product_no
-                WHERE s.region_no = ?
-                AND s.enabled = 1
+                WHERE DATEDIFF(NOW(), p.created_datetime) <= 3
                 AND p.enabled = 1
-                ORDER BY ${sort === 'descending' ? 'p.created_datetime DESC' : sort === 'impending' ? 'p.expiry_datetime ASC' : 'p.discount_rate DESC'}
+                AND s.enabled = 1
+                ;
+                
+                (SELECT
+                    1 AS rank,
+                    p.no AS product_no,
+                    p.name AS product_name,
+                    p.regular_price,
+                    p.discounted_price,
+                    p.discount_rate,
+                    p.return_price,
+                    p.expected_quantity,
+                    p.rest_quantity,
+                    p.expiry_datetime,
+                    p.created_datetime,
+                    s.no AS shop_no,
+                    s.name AS shop_name,
+                    s.shop_image,
+                    i.path
+                    FROM products AS p
+                    JOIN shops AS s
+                    ON p.shop_no = s.no
+                    LEFT JOIN (
+                        SELECT
+                        product_no,
+                        path
+                        FROM product_images
+                        WHERE enabled = 1
+                        AND sort = 1
+                    ) AS i
+                    ON p.no = i.product_no
+                    WHERE p.actual_quantity IS NULL
+                    AND p.rest_quantity > 0
+                    AND p.expiry_datetime - NOW() > 0
+                    AND p.enabled = 1
+                    AND s.enabled = 1
+                )
+                UNION
+                (SELECT
+                    2 AS rank,
+                    p.no AS product_no,
+                    p.name AS product_name,
+                    p.regular_price,
+                    p.discounted_price,
+                    p.discount_rate,
+                    p.return_price,
+                    p.expected_quantity,
+                    p.rest_quantity,
+                    p.expiry_datetime,
+                    p.created_datetime,
+                    s.no AS shop_no,
+                    s.name AS shop_name,
+                    s.shop_image,
+                    i.path
+                    FROM products AS p
+                    JOIN shops AS s
+                    ON p.shop_no = s.no
+                    LEFT JOIN (
+                        SELECT
+                        product_no,
+                        path
+                        FROM product_images
+                        WHERE enabled = 1
+                        AND sort = 1
+                    ) AS i
+                    ON p.no = i.product_no
+                    WHERE p.actual_quantity IS NULL
+                    AND p.rest_quantity <= 0
+                    AND p.expiry_datetime - NOW() > 0
+                    AND p.enabled = 1
+                    AND s.enabled = 1
+                )
+                UNION
+                (SELECT
+                    3 AS rank,
+                    p.no AS product_no,
+                    p.name AS product_name,
+                    p.regular_price,
+                    p.discounted_price,
+                    p.discount_rate,
+                    p.return_price,
+                    p.expected_quantity,
+                    p.rest_quantity,
+                    p.expiry_datetime,
+                    p.created_datetime,
+                    s.no AS shop_no,
+                    s.name AS shop_name,
+                    s.shop_image,
+                    i.path
+                    FROM products AS p
+                    JOIN shops AS s
+                    ON p.shop_no = s.no
+                    LEFT JOIN (
+                        SELECT
+                        product_no,
+                        path
+                        FROM product_images
+                        WHERE enabled = 1
+                        AND sort = 1
+                    ) AS i
+                    ON p.no = i.product_no
+                    WHERE (p.actual_quantity IS NOT NULL
+                    OR p.expiry_datetime - NOW() <= 0)
+                    AND DATEDIFF(NOW(), p.created_datetime) <= 3
+                    AND p.enabled = 1
+                    AND s.enabled = 1
+                )
+                ORDER BY RANK, ${sort === 'impending' ? 'expiry_datetime ASC' : sort === 'descending' ? 'created_datetime DESC' : 'discount_rate DESC'}
                 LIMIT ? OFFSET ?;
-            `, [region_no, count, offset]);
-
+            `, [count, offset]);
+            console.log();
             next({
-                products: result.map((product) => ({
+                total_count: result[0][0].total_count,
+                products: result[1].map((product) => ({
                     ...product,
                     regular_price: product.regular_price.toLocaleString('ko-KR'),
                     discounted_price: product.discounted_price.toLocaleString('ko-KR'),
                     return_price: product.return_price.toLocaleString('ko-KR'),
+                    shop_image: BASE_URL + product.shop_image,
                     path: BASE_URL + product.path,
                     discount_rate: parseFloat(product.discount_rate),
                     raw_expiry_datetime: product.expiry_datetime,
@@ -112,6 +217,8 @@ const controller = {
                 p.name AS product_name,
                 p.shop_no,
                 s.name AS shop_name,
+                s.link AS shop_link,
+                s.shop_image,
                 s.tel,
                 s.road_address,
                 s.road_detail_address,
@@ -120,6 +227,7 @@ const controller = {
                 s.latitude,
                 s.longitude,
                 p.expected_quantity,
+                p.actual_quantity,
                 p.rest_quantity,
                 p.regular_price,
                 p.discounted_price,
@@ -128,8 +236,8 @@ const controller = {
                 p.description,
                 p.expiry_datetime,
                 p.pickup_start_datetime,
-                p.pickup_end_datetime,
-                p.google_link
+                p.pickup_end_datetime
+                
                 FROM products AS p
                 JOIN shops AS s
                 ON p.shop_no = s.no
@@ -157,6 +265,7 @@ const controller = {
                 paths: result[0].paths ? (result[0].paths.split(',')).map((path) => (
                     BASE_URL + path
                 )) : [],
+                shop_image: BASE_URL + result[0].shop_image,
                 regular_price: result[0].regular_price.toLocaleString('ko-KR'),
                 discounted_price: result[0].discounted_price.toLocaleString('ko-KR'),
                 return_price: result[0].return_price.toLocaleString('ko-KR'),
@@ -520,9 +629,9 @@ const controller = {
                 `, [user_no]);
 
                 await pointLogApi.postLogPointModels(pointResult.insertId,
-                                                    0,
-                                                    0,
-                                                    connection);
+                    0,
+                    0,
+                    connection);
 
                 await connection.commit();
                 next({ message: "가입되었습니다." });
@@ -555,8 +664,8 @@ const controller = {
         try {
             const phone = param(body, 'phone');
             const authCode = generateRandomCode(6);
- 
-            const [ result ] = await pool.query(`
+
+            const [result] = await pool.query(`
             SELECT *
             FROM users
             WHERE phone = ?
@@ -584,15 +693,15 @@ const controller = {
                 // if(res.error) {
                 //     throw err(400);
                 // }
-                console.log(authCode);
+
 
                 // 데이터베이스 접근
                 try {
                     await connection.beginTransaction();
                     // 인증번호 로그 추가 
                     await authenticationLogApi.postLogAuthentication(phone,
-                                                                    authCode,
-                                                                    connection);
+                        authCode,
+                        connection);
                     await connection.commit();
                 } catch (e) {
                     connection.rollback();
@@ -600,18 +709,18 @@ const controller = {
                     connection.release();
                 }
 
-               
+
                 next({ message: `인증코드 발송에 성공했습니다.` }); // 수정
             } catch (e) {
                 fb.ref(`/auth/sms/${phone}`).remove();
                 next(e);
             }
-            
+
             try {
                 await connection.beginTransaction();
                 // 인증번호 로그 추가 
                 await authenticationLogApi.postLogAuthentication(phone,
-                                                                 authCode);
+                    authCode);
                 await connection.commit();
             } catch (e) {
                 connection.rollback();
@@ -756,17 +865,17 @@ const controller = {
                     WHERE no = ?
                     AND enabled = 1;
                 `, [total_purchase_quantity, product_no]);
-                
+
                 // 상품 수량 변경 사항 로그 반영
                 await productLogAPI.postLogProductQuantityModels(product_no,
-                                                              result[0].expected_quantity,
-                                                              null,
-                                                              result[0].rest_quantity - total_purchase_quantity,
-                                                              connection);
+                    result[0].expected_quantity,
+                    null,
+                    result[0].rest_quantity - total_purchase_quantity,
+                    connection);
                 // 예약 상태 변경 사항 로그 반영
                 await reservationLogApi.postLogReservationStatusModels(reserveResult.insertId,
-                                                                 "ongoing",
-                                                                 connection);
+                    "ongoing",
+                    connection);
 
 
 
@@ -815,11 +924,11 @@ const controller = {
                 `, [return_price, user_no, user_no, return_price]);
 
 
-                
+
                 await pointLogApi.postLogPointModels(result1[0].no,
-                                                    -(parseInt(return_price)),
-                                                    result1[0].point -(parseInt(return_price)),
-                                                    connection);
+                    -(parseInt(return_price)),
+                    result1[0].point - (parseInt(return_price)),
+                    connection);
                 await connection.commit();
 
                 next({ message: "환급신청이 완료되었습니다." });
@@ -1567,7 +1676,7 @@ const controller = {
                 AND u.enabled = 1
                 AND a.enabled = 1
                 AND p.enabled = 1
-                `, [ user_no ]);
+                `, [user_no]);
             next({
                 ...result[0],
                 birthday: dayjs(result[0].birthday).format(`YYYY년 MM월 DD일`)
@@ -1586,58 +1695,127 @@ const controller = {
             const phone_number = param(body, 'phone_number');
             const total_purchase_quantity = param(body, 'total_purchase_quantity');
             const total_purchase_price = param(body, 'total_purchase_price');
-            console.log(body);
-            console.log(phone_number);
+
             const connection = await pool.getConnection(async conn => await conn);
             try {
                 await connection.beginTransaction();
+                let user_mvp_no;
 
-                const [result] = await connection.query(`
-                    SELECT
-                    rest_quantity
-                    FROM products
-                    WHERE no = ?
+                const [result1] = await connection.query(`
+                    SELECT *
+                    FROM user_mvp
+                    WHERE phone_number = ?
                     AND enabled = 1;
-                `, [product_no]);
 
-                // if (result[0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
-                if (result[0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
+                    SELECT
+                    p.name AS product_name,
+                    s.name AS shop_name,
+                    discounted_price,
+                    expected_quantity,
+                    rest_quantity,
+                    expiry_datetime,
+                    expiry_datetime - NOW() AS is_expired
+                    FROM products as p
+                    JOIN shops as s 
+                    ON p.shop_no = s.no
+                    WHERE p.no = ?
+                    AND p.enabled = 1;
+                `, [phone_number, product_no]);
+
+                if (result1[1][0].discounted_price > total_purchase_price) throw err(400, `할인가 이상을 입력해야 합니다.`);
+                if (result1[1][0].rest_quantity < total_purchase_quantity) throw err(400, `잔여 재고가 부족합니다.`);
+                if (result1[1][0].is_expired < 0) throw err(400, `마감된 상품입니다.`);
+
+                const shop_name = result1[1][0].shop_name
+                const product_name = result1[1][0].product_name
+
+                if (result1[0].length < 1) {
+                    const [result] = await connection.query(`
+                        INSERT INTO user_mvp (
+                            phone_number
+                        )
+                        VALUES (?);
+                    `, [phone_number]);
+                    user_mvp_no = result.insertId;
+                } else {
+                    user_mvp_no = result1[0][0].no;
+                    await connection.query(`
+                        UPDATE user_mvp
+                        SET deal_count = deal_count + 1
+                        WHERE no = ?
+                    `, [user_mvp_no]);
+                }
 
                 await connection.query(`
                         INSERT INTO reservations (
                             shop_no,
+                            user_mvp_no,
                             product_no,
                             depositor_name,
                             bank,
                             account_number,
-                            phone_number,
                             total_purchase_quantity,
                             total_purchase_price
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                     `, [
                     shop_no,
+                    user_mvp_no,
                     product_no,
                     depositor_name,
                     bank,
                     account_number,
-                    phone_number,
                     total_purchase_quantity,
                     total_purchase_price
                 ]);
-                // 문자(고객) + 이메일(우리)
-                // await connection.query(`
-                //     UPDATE
-                //     products
-                //     SET rest_quantity = rest_quantity - ?
-                //     WHERE no = ?
-                //     AND enabled = 1;
-                // `, [total_purchase_quantity, product_no]);
 
+                await connection.query(`
+                    UPDATE
+                    products
+                    SET rest_quantity = rest_quantity - ?
+                    WHERE no = ?
+                    AND enabled = 1;
+                `, [total_purchase_quantity, product_no]);
+
+                const kakaoResult = await send({
+                    messages: [{
+                        to: `${phone_number}`,
+                        from: `01043987759`,
+                        kakaoOptions: {
+                            pfId: solapi.pfId,
+                            templateId: solapi.reservationCompleteTemplate,
+                            variables: {
+                                '#{예금주명}': `${depositor_name}`,
+                                '#{총구매가격}': `${total_purchase_price}`
+                            }
+                        }
+                    }]
+                });
+
+                if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+
+                const adminMailFormat = template.adminCompleteReservationApplication({
+                    depositor_name,
+                    phone_number,
+                    shop_name,
+                    product_name,
+                    total_purchase_quantity,
+                    total_purchase_price,
+                })
+
+                await mailer.sendMailToAdmins({
+                    subject: '예약 알림',
+                    text: adminMailFormat
+                });
+                sendSlack(adminMailFormat, 'dev-소비자예약');
                 await connection.commit();
-                next({ message: "예약되었습니다." });
+                next({ message: '예약됐습니다' });
             } catch (e) {
                 await connection.rollback();
+                await mailer.sendMailToDevelopers({
+                    subject: '에러 발생',
+                    text: `${e}`
+                });
                 next(e);
             } finally {
                 connection.release();
@@ -1646,7 +1824,7 @@ const controller = {
             next(e);
         }
     },
-
 };
 
 module.exports = controller;
+

@@ -3,7 +3,7 @@ const queryString = require('query-string');
 
 let database;
 if (process.env.NODE_ENV === 'production') {
-    database = queryString.parse(process.env.DATABASE);
+    database = queryString.parse(process.env.DATABASE_PRODUCTION);
 } else if (process.env.NODE_ENV === 'test') {
     database = queryString.parse(process.env.DATABASE_TEST);
 } else {
@@ -55,6 +55,13 @@ module.exports = {
     },
     solapi: {
         apiKey: process.env.SOLAPI_API_KEY,
-        apiSecret: process.env.SOLAPI_API_SECRET_KEY
+        apiSecret: process.env.SOLAPI_API_SECRET_KEY,
+        pfId: process.env.SOLAPI_PF_ID,
+        reservationCompleteTemplate: process.env.SOLAPI_RESERVATION_COMPLETE_TEMPLATE,
+        reservationCancelTemplate: process.env.SOLAPI_RESERVATION_CANCEL_TEMPLATE,
+        reservationConfirmTemplate: process.env.SOLAPI_RESERVATION_CONFIRM_TEMPLATE,
+        confirmReturnTemplate: process.env.SOLAPI_CONFIRM_RETURN_TEMPLATE,
+        confirmPickupTemplate: process.env.SOLAPI_CONFIRM_PICKUP_TEMPLATE,
+        returnCompleteTemplate: process.env.SOLAPI_RETURN_COMPLETE_TEMPLATE
     }
 };

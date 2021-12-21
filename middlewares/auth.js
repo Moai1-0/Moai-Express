@@ -29,7 +29,7 @@ module.exports = {
             if (authorization === undefined || authorization === null) throw err.Unauthorized("authorization 비어있음");
             const decoded = decodeToken(getToken(authorization));
             if (decoded == null) throw err.Unauthorized('토큰 만료');
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT *
                 FROM users
                 WHERE no = ?
@@ -43,13 +43,13 @@ module.exports = {
             next(e);
         }
     },
-    async checkAdmin(req, { body }, next) {
+    async checkAdmin(req, { pool }, next) {
         try {
             const authorization = req.headers.authorization;
             if (authorization === undefined || authorization === null) throw err.Unauthorized("authorization 비어있음");
             const decoded = decodeToken(getToken(authorization));
             if (decoded == null) throw err.Unauthorized('토큰 만료');
-            const [ result ] = await pool.query(`
+            const [result] = await pool.query(`
                 SELECT *
                 FROM admins
                 WHERE no = ?
@@ -61,6 +61,6 @@ module.exports = {
             next();
         } catch (e) {
             next(e);
-        }        
-    } 
+        }
+    }
 };

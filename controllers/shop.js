@@ -10,7 +10,7 @@ const { send, sendConsumerResult } = require('../utils/solapi');
 require('dotenv').config();
 const S3_URL = require('../config/index').s3.endPoint;
 const { connect } = require('../routes/shop');
-
+const solapi = require('../config').solapi;
 // db-api 상수
 const productLogAPI = require("../db_api/product_log_api");
 const reservationLogApi = require("../db_api/reservation_log_api");
@@ -90,6 +90,7 @@ const controller = {
                         pickup_end_datetime,
                         discount_rate
                     ]);
+                console.log(files);
                 files.map(async (file, index) => {
                     const { instance, params } = S3;
                     // 등록 시간+ product_no + shop_no
@@ -97,7 +98,7 @@ const controller = {
                     params.Key = file_name;
                     params.Body = file.buffer;
                     instance.upload(params, (error, data) => {
-                        if (error) throw err.InternalServerError('S3 에러');
+                        if (error) throw error;
                     });
                     await connection.query(`
                         INSERT INTO product_images (
@@ -122,18 +123,18 @@ const controller = {
 
                     `, [shop_no, result.insertId]);
                 }
-                
+
                 // db 상태변화에 따른 로그 처리
                 await productLogAPI.postLogProductStatusModels(result.insertId,
-                                                            "ongoing",
-                                                            connection);
+                    "ongoing",
+                    connection);
 
                 // db 수량변화에 따른 로그 처리
                 await productLogAPI.postLogProductQuantityModels(result.insertId,
-                                                              expected_quantity,
-                                                              null,
-                                                              rest_quantity,
-                                                              connection);
+                    expected_quantity,
+                    null,
+                    rest_quantity,
+                    connection);
 
                 await connection.commit();
                 next({ message: "업로드가 완료 되었습니다" });
@@ -165,6 +166,7 @@ const controller = {
                 b.pickup_start_datetime,
                 b.pickup_end_datetime,
                 b.return_price,
+                b.discount_rate,
                 GROUP_CONCAT(path) AS "product_images"
                 FROM product_bookmark AS a
                 INNER JOIN products AS b
@@ -806,11 +808,11 @@ const controller = {
                             WHERE user_no = ?
                             AND enabled = 1;
                             `, [result1[i].user_no]);
-                        
+
                         await pointLogApi.postLogPointModels(result1[i].user_no,
-                                                            result1[i].return_price * temp_return_quantity,
-                                                            pointResult[0].point + (result1[i].return_price * temp_return_quantity),
-                                                            connection)
+                            result1[i].return_price * temp_return_quantity,
+                            pointResult[0].point + (result1[i].return_price * temp_return_quantity),
+                            connection);
 
                     }
                     await connection.query(`
@@ -822,19 +824,19 @@ const controller = {
                             AND enabled = 1
                         `, [result1[i].reservation_no]);
                     for_check_quantity -= temp_reserved_quantity;
-                    
+
                     // 예약 상태 변경 사항 로그 반영
                     await reservationLogApi.postLogReservationStatusModels(result1[i].reservation_no,
-                                                                     "waiting",
-                                                                     connection);
+                        "waiting",
+                        connection);
                 }
 
                 // 실재고수량 기입에 따른 로그 처리
                 await productLogAPI.postLogProductQuantityModels(product_no,
-                                                                 result1[0].expected_quantity,
-                                                                 actual_quantity,
-                                                                 result1[0].rest_quantity,
-                                                                 connection);
+                    result1[0].expected_quantity,
+                    actual_quantity,
+                    result1[0].rest_quantity,
+                    connection);
 
                 await connection.commit();
                 next({ message: "ping" });
@@ -884,11 +886,11 @@ const controller = {
                         WHERE
                         no = ?
                     `, [reservation_no]);
-                    
+
                     // 예약 상태 변경 사항 로그 반영
                     await reservationLogApi.postLogReservationStatusModels(reservation_no,
-                                                                            "done",
-                                                                             connection);
+                        "done",
+                        connection);
 
                     const [result2] = await connection.query(`
                         SELECT
@@ -910,8 +912,8 @@ const controller = {
 
                         // 프로덕트완 관련된 거래 모두 완료시 "done"으로 상태 변경
                         await productLogAPI.postLogProductStatusModels(product_no,
-                                                                    "done",
-                                                                     connection);
+                            "done",
+                            connection);
                     }
                 }
                 // for (let i = 0; i < result1.length; i++) {
@@ -1001,6 +1003,669 @@ const controller = {
             next(e);
         }
     },
+
+    //mvp 
+
+    async getPrebidProductMVP({ shop, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const product_no = param(query, "product_no");
+
+            const [result] = await pool.query(`
+                SELECT 
+                a.no AS reservation_no,
+                a.user_mvp_no AS user_no,
+                a.shop_no,
+                a.product_no,
+                a.depositor_name,
+                a.total_purchase_quantity,
+                a.total_purchase_price,
+                b.name AS "product_name",
+                c.phone_number AS "phone_number",
+                a.created_datetime
+                FROM reservations AS a
+                INNER JOIN products AS b
+                ON a.product_no = b.no
+                INNER JOIN user_mvp AS c
+                ON a.user_mvp_no = c.no 
+                WHERE
+                a.shop_no = ?
+                AND a.product_no = ?
+                AND a.status = "ongoing"
+                AND a.enabled = 1
+                ORDER BY a.created_datetime ASC;
+
+                SELECT
+                a.no AS product_no,
+                a.name AS product_name,
+                a.expected_quantity,
+                a.rest_quantity,
+                a.actual_quantity,
+                a.regular_price,
+                a.return_price,
+                a.discounted_price,
+                a.discount_rate,
+                a.pickup_start_datetime,
+                a.pickup_end_datetime,
+                a.expiry_datetime,
+                a.created_datetime,
+                b.sort,
+                GROUP_CONCAT(path) AS "product_images"
+                FROM products AS a
+                INNER JOIN product_images AS b
+                ON a.no = b.product_no
+                WHERE
+                a.shop_no = ?
+                AND a.no = ?
+                GROUP BY b.product_no
+            `, [shop_no, product_no, shop_no, product_no]);
+            if (result[1].length < 1) throw err.NotFound('비정상적인 접근');
+
+
+            next({
+                product: {
+                    ...result[1][0],
+                    pickup_start_datetime: dayjs(result[1][0].pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                    pickup_end_datetime: dayjs(result[1][0].pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
+                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm"),
+                    created_datetime: dayjs(result[1][0].created_datetime).format("YYYY-MMDD HH:mm"),
+                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item),
+
+                },
+                orders: result[0].map(item => ({
+                    ...item,
+                    created_datetime: dayjs(item.created_datetime).format("YYYY-MM-DD HH:mm")
+                }))
+            });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getBidProductsMVP({ shop }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+
+            const [result] = await pool.query(`       
+                SELECT
+                a.no AS 'product_no',
+                a.name AS 'product_name',
+                a.expected_quantity,
+                a.actual_quantity,
+                a.rest_quantity,
+                a.regular_price,
+                a.return_price,
+                a.discounted_price,
+                a.pickup_start_datetime,
+                a.pickup_end_datetime,
+                a.expiry_datetime,
+                a.actual_quantity,
+                b.sort,
+                c.pre_pickup_count,
+                d.pre_return_count,
+                GROUP_CONCAT(path) AS "product_images"
+                FROM products AS a            
+                LEFT JOIN (SELECT 
+                            product_no,
+                            COUNT(*) as pre_pickup_count
+                            FROM orders
+                            WHERE status = 'pre_pickup'
+                            GROUP BY product_no) AS c
+                ON c.product_no = a.no
+                LEFT JOIN (SELECT 
+                            product_no,
+                            COUNT(*) as pre_return_count
+                            FROM orders
+                            WHERE status = 'pre_return'
+                            GROUP BY product_no) AS d
+                ON d.product_no = a.no
+                LEFT JOIN product_images AS b
+                ON a.no = b.product_no
+                WHERE
+                a.shop_no = ?
+                AND actual_quantity IS NOT NULL
+                AND a.expiry_datetime < NOW()
+                AND a.status = 'ongoing'
+                AND a.enabled = 1
+                GROUP BY a.no
+
+                    `, [shop_no]);
+            console.log(result);
+            next(result.map(item => ({
+                ...item,
+                pickup_start_datetime: dayjs(item.pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                pickup_end_datetime: dayjs(item.pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
+                expiry_datetime: dayjs(item.expiry_datetime).format("YYYY-MM-DD HH:mm:ss"),
+                product_images: (item.product_images) ? item.product_images.split(',').map(item => S3_URL + item) : []
+            })));
+        } catch (e) {
+            next(e);
+        }
+    },
+    async getBidProductMVP({ shop, query }, { pool }, next) {
+        try {
+            const shop_no = auth(shop, "shop_no");
+            const product_no = param(query, "product_no");
+            const [result] = await pool.query(`
+                SELECT 
+                a.no AS reservation_no,
+                a.user_mvp_no,
+                a.shop_no,
+                a.product_no,
+                a.depositor_name,
+                a.total_purchase_quantity,
+                a.total_purchase_price,
+                a.status,
+                b.name AS "product_name",
+                c.phone_number,
+                a.created_datetime,
+                d.purchase_quantity AS pre_pickup_quantity,
+                e.purchase_quantity AS pickup_quantity,
+                f.purchase_quantity AS pre_return_quantity,
+                g.purchase_quantity AS return_quantity,
+                d.pre_pickup_order_no
+                FROM 
+                reservations AS a
+                INNER JOIN products AS b
+                ON a.product_no = b.no
+                INNER JOIN user_mvp AS c
+                ON a.user_mvp_no = c.no 
+                LEFT JOIN 
+                (SELECT
+                no AS pre_pickup_order_no,
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'pre_pickup') AS d
+                ON a.no = d.reservation_no
+                LEFT JOIN 
+                (SELECT 
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'pickup') AS e
+                ON a.no = e.reservation_no
+                LEFT JOIN 
+                (SELECT 
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'pre_return') AS f
+                ON a.no = f.reservation_no
+                LEFT JOIN 
+                (SELECT 
+                reservation_no,
+                purchase_quantity,
+                status
+                FROM orders
+                WHERE status = 'return') AS g
+                ON a.no = g.reservation_no
+                WHERE
+                a.shop_no = ?
+                AND a.product_no = ?
+                AND a.enabled = 1
+                ORDER BY a.created_datetime ASC;
+
+                SELECT
+                a.no AS product_no,
+                a.name AS product_name,
+                a.actual_quantity, 
+                a.expected_quantity,
+                a.rest_quantity,
+                a.regular_price,
+                a.return_price,
+                a.discounted_price,
+                a.discount_rate,
+                a.pickup_start_datetime,
+                a.pickup_end_datetime,
+                a.expiry_datetime,
+                a.created_datetime,
+                b.sort,
+                GROUP_CONCAT(path) AS "product_images"
+                FROM products AS a
+                LEFT JOIN product_images AS b
+                ON a.no = b.product_no
+                WHERE
+                a.expiry_datetime < NOW()
+                AND a.actual_quantity IS NOT NULL
+                AND a.shop_no = ?
+                AND a.no = ?
+                GROUP BY b.product_no
+            `, [shop_no, product_no, shop_no, product_no]);
+            if (result[1].length < 1) throw err.BadRequest('비정상적인 접근');
+            // if (result[1].length >= 1) throw err.Unauthorized('비권한 테스트');
+
+            next({
+                product: {
+                    ...result[1][0],
+                    pickup_start_datetime: dayjs(result[1][0].pickup_start_datetime).format("YYYY-MM-DD HH:mm"),
+                    pickup_end_datetime: dayjs(result[1][0].pickup_end_datetime).format("YYYY-MM-DD HH:mm"),
+                    expiry_datetime: dayjs(result[1][0].expiry_datetime).format("YYYY-MM-DD HH:mm"),
+                    created_datetime: dayjs(result[1][0].created_datetime).format("YYYY-MMDD HH:mm"),
+                    product_images: result[1][0].product_images.split(',').map(item => S3_URL + item),
+
+                },
+                orders: result[0].map(item => ({
+                    ...item,
+                    created_datetime: dayjs(item.created_datetime).format("YYYY-MM-DD HH:mm")
+                }))
+            });
+        } catch (e) {
+            next(e);
+        }
+    },
+    async mvpPatchOrderPreStatus({ body }, { pool }, next) {
+        try {
+            const order_no = param(body, 'order_no');
+            const connection = await pool.getConnection(async conn => await conn);
+
+            await connection.beginTransaction();
+            try {
+                const [orderResult] = await connection.query(`
+                    SELECT 
+                    o.status,
+                    o.reservation_no,
+                    o.product_no,
+                    o.return_price AS total_return_price,
+                    r.depositor_name,
+                    u.phone_number
+                    FROM orders AS o
+                    JOIN reservations AS r
+                    ON o.reservation_no = r.no
+                    JOIN user_mvp AS u
+                    ON o.user_mvp_no = u.no
+                    WHERE o.no = ? 
+                    AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
+                    AND o.enabled = 1
+                    AND r.enabled = 1
+                    AND u.enabled = 1;
+                `, [order_no]);
+
+                const order_status = orderResult[0].status; // 상태 추출
+                const reservation_no = orderResult[0].reservation_no;
+                const product_no = orderResult[0].product_no;
+                const total_return_price = orderResult[0].total_return_price;
+                const depositor_name = orderResult[0].depositor_name;
+                const phone_number = orderResult[0].phone_number;
+                const update_status = order_status === 'pre_pickup' ? 'pickup' : 'return';
+
+                await connection.query(`
+                    UPDATE orders as o
+                    SET status = ?
+                    WHERE no = ?
+                    AND o.enabled = 1
+                `, [update_status, order_no]);
+
+                const [reservationTemp] = await connection.query(`
+                    SELECT *
+                    FROM orders AS o
+                    WHERE o.reservation_no = ? 
+                    AND (o.status = 'pre_pickup' OR o.status = 'pre_return')
+                    AND o.enabled = 1
+                `, [reservation_no]);
+
+                const reservationCount = reservationTemp.length;
+
+                if (update_status === 'return') {
+                    const kakaoResult = await send({
+                        messages: [{
+                            to: `${phone_number}`,
+                            from: `01043987759`,
+                            kakaoOptions: {
+                                pfId: solapi.pfId,
+                                templateId: solapi.returnCompleteTemplate,
+                                variables: {
+                                    '#{예금자명}': `${depositor_name}`,
+                                    '#{총환급금}': `${total_return_price}`
+                                }
+                            }
+                        }]
+                    });
+                    if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+
+                }
+
+                // 픽업 대기나 환급 대기가 있는 상황
+                if (reservationCount > 0) {
+                    await connection.commit();
+
+                    next({ message: "입력이 완료되었습니다" });
+                }
+
+                // 픽업 대기나 환급 대기가 더 이상 없는 상황(예약 종료 처리)
+                await connection.query(`
+                    UPDATE reservations as r
+                    SET status = 'done'
+                    WHERE no = ? 
+                    AND r.enabled = 1
+                `, [reservation_no]);
+
+                // 예약 종료가 되지 않은 상품이 있는지 확인
+                const [productTemp] = await connection.query(`
+                    SELECT *
+                    FROM reservations AS r
+                    WHERE r.product_no = ? 
+                    AND r.status != 'done'
+                    AND r.enabled = 1
+                `, [product_no]);
+
+                if (productTemp.length > 0) {
+                    await connection.commit();
+                    next({ message: "입력이 완료되었습니다" });
+                }
+
+                // 상품 마감 처리
+                await connection.query(`
+                    UPDATE products as p
+                    SET status = 'done'
+                    WHERE no = ? 
+                    AND p.enabled = 1
+                `, [product_no]);
+
+                await connection.commit();
+                next({ message: "입력이 완료되었습니다" });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+        } catch (e) {
+            next(e);
+        }
+    },
+    async mvpPatchActualQuantityProduct({ body }, { pool }, next) {
+        try {
+            const actual_quantity = param(body, "actual_quantity");
+            const product_no = param(body, "product_no");
+            // console.log(process.env.SOLAPI_CONFIRM_PICKUP_TEMPLATE, "ENV@@");
+            let pickupArray = [];
+            let returnArray = [];
+
+            const [verifyAllConfirmed] = await pool.query(`
+                SELECT *
+                FROM reservations as r
+                WHERE r.product_no = ? 
+                AND r.status = 'pre_confirmed' 
+                AND r.enabled = 1
+            `, [product_no]);
+
+            if (verifyAllConfirmed.length > 0) {
+                throw err(400, "승인되지 않은 예약이 있습니다.");
+            }
+
+            const [reservationResult] = await pool.query(`
+                SELECT
+                r.no AS reservation_no,
+                r.user_mvp_no,
+                r.shop_no,
+                r.product_no,
+                r.total_purchase_quantity,
+                r.total_purchase_price,
+                r.bank,
+                r.account_number,
+                r.depositor_name,
+                r.status,
+                p.expected_quantity,
+                p.return_price,
+                s.name AS shop_name,
+                s.tel AS shop_tel,
+                CONCAT(s.road_address, ' ', s.road_detail_address) AS shop_address
+                FROM reservations AS r
+                JOIN products AS p
+                ON r.product_no = p.no 
+                JOIN shops AS s
+                ON r.shop_no = s.no
+                WHERE r.product_no = ?
+                AND r.enabled = 1
+                AND p.enabled = 1
+                AND s.enabled = 1
+            `, [product_no]);
+
+            const connection = await pool.getConnection(async conn => await conn);
+
+            try {
+                if (reservationResult.length <= 0) {
+                    console.log(1);
+                    connection.query(`
+                        UPDATE products as p
+                        SET p.status = 'done', p.actual_quantity = ?
+                        WHERE p.no = ?
+                        AND p.enabled = 1
+                    `, [actual_quantity, product_no]);
+                    next({ message: "예약이 없어 상품 판매가 종료되었습니다." });
+                }
+
+                const expected_quantity = reservationResult[0].expected_quantity;
+                const return_price = reservationResult[0].return_price;
+                const shop_name = reservationResult[0].shop_name;
+                const shop_tel = reservationResult[0].shop_tel;
+                const shop_address = reservationResult[0].shop_address;
+
+                if (expected_quantity < actual_quantity) {
+                    throw err(400, "예상 재고보다 입력된 재고량이 더 많습니다");
+                }
+
+                let leftQuantity = actual_quantity;
+
+                for (let r of reservationResult) {
+                    let totalPurchased = r.total_purchase_quantity;
+                    const productPrice = r.total_purchase_price / totalPurchased;
+
+                    const [temp] = await connection.query(`
+                        SELECT 
+                        r.depositor_name,
+                        u.phone_number,
+                        p.name AS product_name,
+                        p.pickup_start_datetime,
+                        p.pickup_end_datetime
+                        FROM reservations AS r
+                        JOIN products AS p
+                        ON r.product_no = p.no
+                        JOIN user_mvp AS u
+                        ON r.user_mvp_no = u.no
+                        WHERE r.no = ?
+                        AND r.enabled = 1
+                        AND p.enabled = 1
+                        AND u.enabled = 1
+                    `, [r.reservation_no]);
+
+                    temp[0].pickup_start_datetime = dayjs(temp[0].pickup_start_datetime).format(`YYYY-MM-DD(ddd) a h:mm`);
+                    temp[0].pickup_end_datetime = dayjs(temp[0].pickup_end_datetime).format(`YYYY-MM-DD(ddd) a h:mm`);
+
+                    if (totalPurchased <= leftQuantity) {
+                        leftQuantity -= totalPurchased;
+                        await connection.query(`
+                            INSERT INTO orders (
+                                reservation_no,
+                                product_no,
+                                user_mvp_no,
+                                shop_no,
+                                purchase_quantity,
+                                purchase_price,
+                                return_price,
+                                status
+                            ) 
+                            VALUES(?,?,?,?,?,?,?,?)
+                        `, [
+                            r.reservation_no,
+                            r.product_no,
+                            r.user_mvp_no,
+                            r.shop_no,
+                            totalPurchased,
+                            r.total_purchase_price,
+                            0,
+                            "pre_pickup"
+                        ]);
+                        let tempPickup = {
+                            ...temp[0],
+                            total_purchase_quantity: totalPurchased
+                        };
+                        pickupArray.push(tempPickup);
+                    } else {
+                        if (leftQuantity > 0) {
+                            await connection.query(`
+                                INSERT INTO orders (
+                                    reservation_no,
+                                    product_no,
+                                    user_mvp_no,
+                                    shop_no,
+                                    purchase_quantity,
+                                    purchase_price,
+                                    return_price,
+                                    status
+                                ) 
+                                VALUES(?,?,?,?,?,?,?,?)
+                        `, [
+                                r.reservation_no,
+                                r.product_no,
+                                r.user_mvp_no,
+                                r.shop_no,
+                                leftQuantity,
+                                leftQuantity * productPrice,
+                                0,
+                                "pre_pickup"
+                            ]);
+                            let tempPickup = {
+                                ...temp[0],
+                                total_purchase_quantity: leftQuantity
+                            };
+                            pickupArray.push(tempPickup);
+                            totalPurchased -= leftQuantity;
+                            leftQuantity = 0;
+                        }
+
+                        if (totalPurchased > 0) {
+                            await connection.query(`
+                            INSERT INTO orders (
+                                reservation_no,
+                                product_no,
+                                user_mvp_no,
+                                shop_no,
+                                purchase_quantity,
+                                purchase_price,
+                                return_price,
+                                status
+                            ) 
+                            VALUES(?,?,?,?,?,?,?,?)
+                        `, [
+                                r.reservation_no,
+                                r.product_no,
+                                r.user_mvp_no,
+                                r.shop_no,
+                                totalPurchased,
+                                0,
+                                totalPurchased * (productPrice + return_price),
+                                "pre_return"
+                            ]);
+                            let tempReturn = {
+                                ...temp[0],
+                                total_purchase_quantity: totalPurchased,
+                                total_return_price: totalPurchased * (productPrice + return_price)
+                            };
+                            returnArray.push(tempReturn);
+                        }
+                    }
+                    await connection.query(`
+                        UPDATE reservations as r
+                        SET r.status = "waiting"
+                        WHERE r.no = ?
+                        AND r.enabled = 1;
+                        UPDATE products as p
+                        SET p.actual_quantity = ?
+                        WHERE p.no = ?
+                        AND p.enabled = 1;
+                    `, [r.reservation_no, actual_quantity, product_no]);
+                }
+
+                /**
+                 * 배열돌면서 쏘는 방식이 아니라
+                 * 솔라피에 배열 방식으로 넣어주는 방식으로 바꿀 예정
+                 */
+                for (let p of pickupArray) {
+                    const {
+                        phone_number,
+                        depositor_name,
+                        product_name,
+                        total_purchase_quantity,
+                        pickup_start_datetime,
+                        pickup_end_datetime,
+                    } = p;
+
+                    const kakaoResult = await send({
+                        messages: [
+                            {
+                                to: `${phone_number}`,
+                                from: `01043987759`,
+                                kakaoOptions: {
+                                    pfId: solapi.pfId,
+                                    templateId: solapi.confirmPickupTemplate,
+                                    variables: {
+                                        '#{예금자명}': `${depositor_name}`,
+                                        '#{상품명}': `${product_name}`,
+                                        '#{구매수량}': `${total_purchase_quantity}`,
+                                        '#{수령시작시간}': `${pickup_start_datetime}`,
+                                        '#{수령마감시간}': `${pickup_end_datetime}`,
+                                        '#{가게명}': `${shop_name}`,
+                                        '#{가게주소}': `${shop_address}`,
+                                        '#{가게전화번호}': `${shop_tel}`
+                                    }
+
+                                }
+                            }
+                        ]
+                    });
+
+                    if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+
+                }
+
+
+                for (let r of returnArray) {
+                    const {
+                        phone_number,
+                        depositor_name,
+                        product_name,
+                        total_purchase_quantity,
+                        total_return_price
+                    } = r;
+
+                    const kakaoResult = await send({
+                        messages: [{
+                            to: `${phone_number}`,
+                            from: `01043987759`,
+                            kakaoOptions: {
+                                pfId: solapi.pfId,
+                                templateId: solapi.confirmReturnTemplate,
+                                variables: {
+                                    '#{예금자명}': `${depositor_name}`,
+                                    '#{상품명}': `${product_name}`,
+                                    '#{구매수량}': `${total_purchase_quantity}`,
+                                    '#{가게명}': `${shop_name}`,
+                                    '#{총환급금}': `${total_return_price}`
+                                }
+                            }
+                        }]
+                    });
+
+                    if (kakaoResult === null) throw err(400, '친구톡 전송에 실패했습니다.');
+                }
+
+                next({ message: "성공적으로 처리되었습니다" });
+            } catch (e) {
+                await connection.rollback();
+                next(e);
+            } finally {
+                connection.release();
+            }
+        } catch (e) {
+            next(e);
+        }
+    },
+
+
     async controllerFormat({ shop, body, query }, { pool }, next) {
         try {
             const shop_no = auth(shop, "shop_no");
