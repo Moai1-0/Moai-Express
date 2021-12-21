@@ -3,7 +3,7 @@ const queryString = require('query-string');
 
 let database;
 if (process.env.NODE_ENV === 'production') {
-    database = queryString.parse(process.env.DATABASE);
+    database = queryString.parse(process.env.DATABASE_PRODUCTION);
 } else if (process.env.NODE_ENV === 'test') {
     database = queryString.parse(process.env.DATABASE_TEST);
 } else {

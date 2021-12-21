@@ -53,7 +53,9 @@ const { sendSlack } = require('./utils/slack');
 
 app.use((data, req, res, next) => {
     if (data instanceof Error) {
+        console.log(data);
         if (data.status == 400 || data.status == 500) {
+            
             sendSlack(data, 'dev-에러');
         }
         return res.status(data.status || 500).json({
