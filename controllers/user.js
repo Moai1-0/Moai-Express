@@ -207,6 +207,112 @@ const controller = {
             next(e);
         }
     },
+    async getShopsByRegion({ query }, { pool }, next) {
+        try {
+            const region_no = param(query, 'region_no', 1);
+            
+            const shops = [];
+
+            const [results1] = await pool.query(`
+                SELECT
+                no AS shop_no,
+                name AS shop_name,
+                link AS shop_link,
+                tel,
+                shop_image
+                FROM shops
+                WHERE enabled = 1
+                AND region_no = ?
+            `, [region_no]);
+
+            results1.map(shop => shops.push({
+                ...shop,
+                total_product_count: null,
+                products: []
+            }));
+
+            shop_nos = shops.map(shop => shop.shop_no);
+
+            const [results2] = await pool.query(`
+                SELECT
+                1 AS rank,
+                s.no AS shop_no,
+                p.no AS product_no,
+                p.name AS product_name,
+                p.regular_price,
+                p.discounted_price,
+                p.discount_rate,
+                p.return_price,
+                p.expected_quantity,
+                p.rest_quantity,
+                p.expiry_datetime,
+                p.created_datetime,
+                i.path
+                FROM shops AS s
+                JOIN products AS p
+                ON s.no = p.shop_no
+                LEFT JOIN (
+                    SELECT
+                    product_no,
+                    path
+                    FROM product_images
+                    WHERE enabled = 1
+                    AND sort = 1
+                ) AS i
+                ON p.no = i.product_no
+                WHERE s.no IN (?) 
+                AND p.actual_quantity IS NULL
+                AND p.rest_quantity > 0
+                AND p.expiry_datetime - NOW() > 0
+                AND p.enabled = 1
+                UNION
+                SELECT
+                2 AS rank,
+                s.no AS shop_no,
+                p.no AS product_no,
+                p.name AS product_name,
+                p.regular_price,
+                p.discounted_price,
+                p.discount_rate,
+                p.return_price,
+                p.expected_quantity,
+                p.rest_quantity,
+                p.expiry_datetime,
+                p.created_datetime,
+                i.path
+                FROM shops AS s
+                JOIN products AS p
+                ON s.no = p.shop_no
+                LEFT JOIN (
+                    SELECT
+                    product_no,
+                    path
+                    FROM product_images
+                    WHERE enabled = 1
+                    AND sort = 1
+                ) AS i
+                ON p.no = i.product_no
+                WHERE s.no IN (?)
+                AND p.actual_quantity IS NULL
+                AND p.rest_quantity <= 0
+                AND p.expiry_datetime - NOW() > 0
+                AND p.enabled = 1
+                ORDER BY rank, expiry_datetime ASC, product_no DESC
+                LIMIT ?
+            `, [shop_nos, shop_nos, PAGINATION_COUNT]);
+
+            shops.map((shop, i) => {
+                shops[i].products = results2.filter(product => product.shop_no === shop.shop_no).map(product => product);
+                shops[i].total_product_count = shops[i].products.length;
+            })
+            
+            shops.sort((a, b) => b.total_product_count - a.total_product_count);
+            
+            next({ shops });
+        } catch (e) {
+            next(e);
+        }
+    },
     async getProduct({ query }, { pool }, next) {
         try {
             const product_no = param(query, 'product_no');
