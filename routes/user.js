@@ -5,6 +5,7 @@ const { checkUser } = require('../middlewares/auth');
 
 router.get('/products', user.getProducts); // 상품 리스트 조회
 router.get('/product', user.getProduct); // 상품 상세 조회
+router.get('/shops', user.getShopsByRegion); // 지역으로 가게 리스트
 router.get('/products/search', user.searchProducts); // 상품 검색
 router.post('/signup', user.signup); // 회원가입
 router.post('/signup/email/check', user.checkEmail); // 회원가입 - 이메일 중복 검사
